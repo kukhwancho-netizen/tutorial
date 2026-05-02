@@ -9,7 +9,7 @@ import json
 import sys
 from typing import Any, Dict
 
-from .result import PipelineAbort
+from .domain import PipelineAbort
 
 
 def estimate_payload_tokens(obj: Any) -> int:

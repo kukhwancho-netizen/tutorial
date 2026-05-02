@@ -27,7 +27,7 @@ from .dry_run import (
     make_fallback_reviewer_result,
 )
 from .reporting import build_report_from_data, render_report_markdown
-from .result import CalendarAuthError, MalformedModelJSONError
+from .domain import CalendarAuthError, MalformedModelJSONError
 from .settings import (
     REVIEWERS,
     iso,

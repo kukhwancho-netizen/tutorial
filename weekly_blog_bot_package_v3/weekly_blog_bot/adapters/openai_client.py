@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from jsonschema import Draft202012Validator
 
 from ..domain import ModelCallResult
-from ..result import MalformedModelJSONError, PipelineAbort
+from ..domain import MalformedModelJSONError, PipelineAbort
 from ..settings import load_yaml, model_ids_from_config
 
 try:  # pragma: no cover

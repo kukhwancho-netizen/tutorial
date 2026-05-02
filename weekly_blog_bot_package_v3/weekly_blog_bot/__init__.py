@@ -42,7 +42,7 @@ from .reporting import (  # noqa: F401
     render_report_markdown,
     render_spec_item_markdown,
 )
-from .result import (  # noqa: F401
+from .domain import (  # noqa: F401
     CalendarAuthError,
     Err,
     MalformedModelJSONError,

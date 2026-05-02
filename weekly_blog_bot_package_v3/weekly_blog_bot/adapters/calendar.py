@@ -11,7 +11,7 @@ import pathlib
 import sys
 from typing import Any, Dict
 
-from ..result import CalendarAuthError, PipelineAbort
+from ..domain import CalendarAuthError, PipelineAbort
 from ..settings import SCOPES, iso
 
 
