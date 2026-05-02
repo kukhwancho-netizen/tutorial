@@ -20,14 +20,14 @@ from .adapters.openai_client import (
     validate_json,
 )
 from .budget import enforce_context_budget
-from .domain import StageContext
+from .domain import StageContext, CalendarAuthError, MalformedModelJSONError
 from .dry_run import (
     make_dry_run_review,
     make_dry_run_spec,
     make_fallback_reviewer_result,
 )
+from .pass_def import SPEC_PASS, BatchPass
 from .reporting import build_report_from_data, render_report_markdown
-from .domain import CalendarAuthError, MalformedModelJSONError
 from .settings import (
     REVIEWERS,
     iso,
@@ -44,17 +44,15 @@ from .settings import (
 )
 
 
-REVIEWER_PROMPTS = {
-    "R1": "20_reviewer_r1_system.md",
-    "R2": "21_reviewer_r2_system.md",
-    "R3": "22_reviewer_r3_system.md",
-}
-
-
 # ---------- 단계 1: 준비 ----------
 
-def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool) -> StageContext:
-    """env 로드 + config 로드 + 경로/스키마 준비."""
+def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
+                  pass_: BatchPass = SPEC_PASS) -> StageContext:
+    """env 로드 + config 로드 + 경로/스키마 준비.
+
+    pass_별 batch 스키마(spec_batch / draft_batch)를 로드한다. ctx.spec_schema는
+    필드 이름 호환을 위해 유지되며, 안에 들어가는 스키마는 pass_에 따라 다르다.
+    """
     load_environment()
     config = load_yaml(config_path)
     if no_calendar:
@@ -74,9 +72,10 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool) -> StageCont
         dry_run=dry_run,
         no_calendar=no_calendar,
     )
-    ctx.spec_schema = load_json(paths.schemas / "spec_batch.schema.json")
+    ctx.spec_schema = load_json(paths.schemas / pass_.schema_file)
     ctx.reviewer_schema = load_json(paths.schemas / "reviewer_result.schema.json")
     ctx.report_schema = load_json(paths.schemas / "final_report.schema.json")
+    ctx.pass_label = pass_.output_label
     return ctx
 
 
@@ -119,26 +118,33 @@ def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
     }
 
 
-def stage_generate_spec(ctx: StageContext, *, client: Any) -> StageContext:
+def stage_generate(ctx: StageContext, *, client: Any,
+                   pass_: BatchPass = SPEC_PASS) -> StageContext:
+    """배치 생성 단계 — pass_별 schema/prompt를 사용한다."""
     payload = _make_order_payload(ctx)
-    enforce_context_budget(ctx.config, payload, "generator")
+    enforce_context_budget(ctx.config, payload, f"generator-{pass_.name}")
     openai_cfg = ctx.config.get("openai", {})
     model_ids = model_ids_from_config(ctx.config)
     max_tokens = int(openai_cfg.get("max_output_tokens", 12000))
-    use_web = bool(openai_cfg.get("use_web_search", True))
-    spec_result = call_openai_json(
+    use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
+    result = call_openai_json(
         client=client,
         model=model_ids["generator"],
-        instructions=load_text(ctx.paths.prompts / "10_generator_system.md"),
+        instructions=load_text(ctx.paths.prompts / pass_.generator_prompt_file),
         payload=payload,
         schema=ctx.spec_schema,
-        schema_name="WeeklySpecBatch",
+        schema_name=pass_.schema_name,
         max_output_tokens=max_tokens,
         use_web_search=use_web,
     )
-    ctx.spec = spec_result.data
-    ctx.usage.add(model_ids["generator"], spec_result.usage)
+    ctx.spec = result.data
+    ctx.usage.add(model_ids["generator"], result.usage)
     return ctx
+
+
+# 옛 이름 호환용 alias.
+def stage_generate_spec(ctx: StageContext, *, client: Any) -> StageContext:
+    return stage_generate(ctx, client=client, pass_=SPEC_PASS)
 
 
 # ---------- 단계 4: 검수 ----------
@@ -149,10 +155,11 @@ def _call_reviewer(
     ctx: StageContext,
     reviewer: str,
     stage_label: str,
+    pass_: BatchPass,
 ) -> Dict[str, Any]:
     openai_cfg = ctx.config.get("openai", {})
     max_tokens = int(openai_cfg.get("max_output_tokens", 12000))
-    use_web = bool(openai_cfg.get("use_web_search", True))
+    use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     reviewer_payload = {
         "spec_batch": ctx.spec,
         "config": model_facing_config(ctx.config),
@@ -164,7 +171,7 @@ def _call_reviewer(
         reviewer_result = call_openai_json(
             client=client,
             model=reviewer_model,
-            instructions=load_text(ctx.paths.prompts / REVIEWER_PROMPTS[reviewer]),
+            instructions=load_text(ctx.paths.prompts / pass_.reviewer_prompt_files[reviewer]),
             payload=reviewer_payload,
             schema=ctx.reviewer_schema,
             schema_name="ReviewerResult",
@@ -174,14 +181,18 @@ def _call_reviewer(
         ctx.usage.add(reviewer_model, reviewer_result.usage)
         return reviewer_result.data
     except MalformedModelJSONError as exc:
-        return make_fallback_reviewer_result(reviewer, ctx.spec, f"{stage_label} {reviewer} malformed JSON: {exc}")
+        return make_fallback_reviewer_result(
+            reviewer, ctx.spec, f"{stage_label} {reviewer} malformed JSON: {exc}"
+        )
 
 
-def stage_review(ctx: StageContext, *, client: Any) -> StageContext:
+def stage_review(ctx: StageContext, *, client: Any,
+                 pass_: BatchPass = SPEC_PASS) -> StageContext:
     reviews: Dict[str, Dict[str, Any]] = {}
     for reviewer in ctx.config.get("review", {}).get("reviewers", REVIEWERS):
         reviews[reviewer] = _call_reviewer(
-            client=client, ctx=ctx, reviewer=reviewer, stage_label=f"review-{reviewer}"
+            client=client, ctx=ctx, reviewer=reviewer,
+            stage_label=f"review-{pass_.name}-{reviewer}", pass_=pass_,
         )
     ctx.reviews = reviews
     return ctx
@@ -189,7 +200,8 @@ def stage_review(ctx: StageContext, *, client: Any) -> StageContext:
 
 # ---------- 단계 5: 보정 ----------
 
-def stage_repair_if_needed(ctx: StageContext, *, client: Any) -> StageContext:
+def stage_repair_if_needed(ctx: StageContext, *, client: Any,
+                           pass_: BatchPass = SPEC_PASS) -> StageContext:
     needs_repair = any(data["verdict"] in {"partial", "fail"} for data in ctx.reviews.values())
     max_repair_rounds = int(ctx.config.get("review", {}).get("max_repair_rounds", 1))
     if not (needs_repair and max_repair_rounds > 0):
@@ -198,22 +210,22 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any) -> StageContext:
     ctx.repair_attempted = True
     openai_cfg = ctx.config.get("openai", {})
     max_tokens = int(openai_cfg.get("max_output_tokens", 12000))
-    use_web = bool(openai_cfg.get("use_web_search", True))
+    use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     model_ids = model_ids_from_config(ctx.config)
     repair_payload = {
         "spec_batch": ctx.spec,
         "reviews": ctx.reviews,
         "config": model_facing_config(ctx.config),
     }
-    enforce_context_budget(ctx.config, repair_payload, "repair")
+    enforce_context_budget(ctx.config, repair_payload, f"repair-{pass_.name}")
     try:
         repair_result = call_openai_json(
             client=client,
             model=model_ids["repair"],
-            instructions=load_text(ctx.paths.prompts / "30_repair_system.md"),
+            instructions=load_text(ctx.paths.prompts / pass_.repair_prompt_file),
             payload=repair_payload,
             schema=ctx.spec_schema,
-            schema_name="WeeklySpecBatch",
+            schema_name=pass_.schema_name,
             max_output_tokens=max_tokens,
             use_web_search=use_web,
         )
@@ -230,7 +242,8 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any) -> StageContext:
     repaired_reviews: Dict[str, Dict[str, Any]] = {}
     for reviewer in list(ctx.reviews.keys()):
         repaired_reviews[reviewer] = _call_reviewer(
-            client=client, ctx=ctx, reviewer=reviewer, stage_label=f"post-repair-{reviewer}"
+            client=client, ctx=ctx, reviewer=reviewer,
+            stage_label=f"post-repair-{pass_.name}-{reviewer}", pass_=pass_,
         )
     ctx.reviews = repaired_reviews
     return ctx
@@ -257,8 +270,9 @@ def stage_build_report(ctx: StageContext) -> StageContext:
 
 def stage_persist(ctx: StageContext) -> StageContext:
     date_part = ctx.basis.strftime("%Y-%m-%d")
-    ctx.json_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}_weekly_report.json"
-    ctx.md_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}_weekly_report.md"
+    label = f"_{ctx.pass_label}" if ctx.pass_label else ""
+    ctx.json_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}{label}_weekly_report.json"
+    ctx.md_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}{label}_weekly_report.md"
     if ctx.config.get("outputs", {}).get("save_json", True):
         write_json(ctx.json_path, {"report": ctx.report, "spec_batch": ctx.spec, "reviews": ctx.reviews})
     if ctx.config.get("outputs", {}).get("save_markdown", True):

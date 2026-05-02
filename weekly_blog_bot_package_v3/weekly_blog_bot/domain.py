@@ -58,6 +58,7 @@ class StageContext:
     md_path: Any = None
     calendar_event_id: Optional[str] = None
     notes: List[str] = field(default_factory=list)
+    pass_label: Optional[str] = None  # "spec" / "draft" — outputs 파일명 라벨
 
 
 # ---------- Result + abort 카테고리 (옛 result.py에서 흡수) ----------
