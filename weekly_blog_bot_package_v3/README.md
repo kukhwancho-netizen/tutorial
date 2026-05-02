@@ -1,6 +1,24 @@
 # 주간 블로그 편성봇
 
-법률 콘텐츠용 주간 자동 편성 파이프라인이다. 기본값은 **제작지시서 7건 생성 + R1/R2/R3 분리 검수 + 보정 1회 + 리포트 저장**이다.
+법률 콘텐츠용 주간 자동 편성 파이프라인이다. 기본값은 **제작지시서 7건 생성 + R1/R2/R3 분리 검수 + 보정 1회 + 리포트 저장**이다. PASS 추상화로 spec(제작지시서) 모드와 draft(초안) 모드를 같은 단계 흐름이 공유한다.
+
+## 근거 규칙 문서 (저장소 루트)
+
+봇 코드와 프롬프트는 저장소 루트의 규칙 문서를 정본으로 따른다. 본 README는 발췌이며, 충돌 시 루트 문서가 우선한다.
+
+| 계층 | 파일 | 봇 내 사용처 |
+|---|---|---|
+| L0 구조 | [`00_파이프라인_v3_최상위_구조.md`](../00_파이프라인_v3_최상위_구조.md) | 파일 존재성 계약 (§2.1) |
+| L1 메타 | [`01_최우선_규칙.md`](../01_최우선_규칙.md), [`02_통합본_메타규칙.md`](../02_통합본_메타규칙.md) | 전 단계 |
+| L2 실행 | [`11_파일_접근_규칙_v2_0.md`](../11_파일_접근_규칙_v2_0.md) | `settings.py` 경로/소환 규칙 |
+| L3 작성 | [`20_FRWRITER_v2_7_1.md`](../20_FRWRITER_v2_7_1.md), [`22_법률상담_문체_보정_v1_1.md`](../22_법률상담_문체_보정_v1_1.md) | `prompts/10_generator_*`, `prompts/11_draft_generator_*` |
+| L3 검토 | [`21_검토지침_v2_7_2.md`](../21_검토지침_v2_7_2.md), [`33_내부_검토_다면화_매트릭스.md`](../33_내부_검토_다면화_매트릭스.md) | 검토관 일반 지침 |
+| L3 인스타 | [`23_옥토리타스_v3_3_1-4doc_db.md`](../23_옥토리타스_v3_3_1-4doc_db.md) | 트랙 2 (본 봇 미사용) |
+| L4 검토관 | [`30_R1_규칙감사관_v2.md`](../30_R1_규칙감사관_v2.md), [`31_R2_법률검수관_v2.md`](../31_R2_법률검수관_v2.md), [`32_R3_문서검토관_v2.md`](../32_R3_문서검토관_v2.md) | `prompts/20~22_reviewer_r*_system.md` (spec), `prompts/23~25_reviewer_r*_draft.md` (draft) |
+| L4 스키마 | [`34_JSON_schema_2종.md`](../34_JSON_schema_2종.md) | `schemas/spec_batch.schema.json`, `schemas/draft_batch.schema.json` |
+| L5 운영 | [`40_리서처_실험_로그.md`](../40_리서처_실험_로그.md), [`41_실험_로그_v1_9_추가_항목.md`](../41_실험_로그_v1_9_추가_항목.md) | 운영 로그 |
+| L7 정본 | [`52_빌더_인스트럭션_압축본.txt`](../52_빌더_인스트럭션_압축본.txt) | Custom GPT Builder Instructions |
+| 데이터 | [`참조_판례_정리본.txt`](../참조_판례_정리본.txt) | 판례 RAG (벡터 스토어 권장) |
 
 ## 핵심 기본값
 
@@ -25,15 +43,15 @@
 weekly_blog_bot_package_v3/
 ├── weekly_blog_bot.py          # 얇은 진입점 (CLI 셸 + 호환 export)
 ├── weekly_blog_bot/            # 핵심 패키지
-│   ├── runner.py               # 파이프라인 오케스트레이터
+│   ├── runner.py               # 파이프라인 오케스트레이터 (PASS 디스패치)
 │   ├── stages.py               # 단계별 함수 (준비→캘린더→생성→검수→보정→리포트→저장→캘린더 쓰기→알림)
-│   ├── decision.py             # 최종 상태 의사결정 표 (RULES)
+│   ├── pass_def.py             # BatchPass 추상화 + SPEC_PASS/DRAFT_PASS + parse_order
+│   ├── decision.py             # 최종 상태 의사결정 표 (SPEC_RULES/DRAFT_RULES)
 │   ├── reporting.py            # 리포트 빌드 + 비용 추정 + 마크다운
 │   ├── budget.py               # 컨텍스트 토큰 예산 가드
-│   ├── dry_run.py              # dry-run 샘플 데이터
+│   ├── dry_run.py              # dry-run 샘플 데이터 + reporting 순환 차단
 │   ├── settings.py             # config/env/경로 로드
-│   ├── domain.py               # 데이터 형식 (StageContext, UsageByModel)
-│   ├── result.py               # Result 형 + abort 카테고리
+│   ├── domain.py               # 데이터 형식 + Result/abort 카테고리
 │   ├── cli.py                  # 명령행 진입점
 │   └── adapters/
 │       ├── openai_client.py    # OpenAI Responses API + 스키마 sanitizer + 모델 검증
@@ -42,8 +60,8 @@ weekly_blog_bot_package_v3/
 ├── tests/
 │   ├── unit/                   # 단위 테스트 (빠름, PR 합치기 게이트)
 │   └── integration/            # 통합 테스트 (전체 흐름)
-├── schemas/                    # JSON Schema 3종
-├── prompts/                    # generator·R1·R2·R3·repair 프롬프트
+├── schemas/                    # spec_batch / draft_batch / reviewer_result / final_report
+├── prompts/                    # spec: 10/20~22/30  draft: 11/23~25/31
 └── config/weekly_blog_bot.yaml
 ```
 
@@ -90,20 +108,16 @@ python weekly_blog_bot.py --config config/weekly_blog_bot.yaml --validate-models
 python weekly_blog_bot.py --config config/weekly_blog_bot.yaml
 ```
 
-## GitHub Actions 운영
+## GitHub Actions 운영 (명령 봇 모델)
 
-workflow 파일: `.github/workflows/weekly.yml`. `workflow_dispatch`와 `schedule`을 모두 지원한다. cron은 UTC 기준이다.
+workflow 파일: `.github/workflows/weekly.yml`. **`workflow_dispatch`만 정상 경로** — cron 자동 실행은 제거됨. 운영자가 매번 명령을 내려야 1회분이 산출된다.
 
-```yaml
-# Monday 08:30 KST = Sunday 23:30 UTC
-- cron: "30 23 * * 0"
-```
+dispatch 입력:
+- `order` — 자유 텍스트 트리거 (예: `블 (민+가+행) 7 ㄱㄱ` 또는 `draft 콘텐츠 3 길이 풀+요약+핵심`). 비우면 기본 spec 모드.
+- `dry_run` — true면 API/Calendar 호출 없이 sample report만 생성.
+- `no_calendar` — true면 Calendar 읽기/쓰기 비활성.
 
-> **주의**: GitHub Actions의 `schedule` 트리거는 부하 시간대에 15~30분(때로 더) 지연된다. "월요일 08:30 KST"는 명목상이고 실제 실행은 08:45~09:30 사이가 될 수 있다. 사람 검토 마감(`human_review.review_deadline`)은 이 지연을 고려해 정한다.
-
-첫 실제 실행은 `workflow_dispatch`에서 `dry_run=false`로 수동 실행한다. 그 다음 주부터 cron을 켜려면 repository variable `ENABLE_WEEKLY_CRON=true`를 설정한다.
-
-workflow 단계: checkout → 의존성 설치 → `py_compile` + 패키지 import 확인 → 단위 테스트(빠른 게이트) → 통합 테스트 → live 모드면 `--validate-models` → 실행 → `outputs/`를 artifact로 업로드(30일 보관).
+workflow 단계: checkout → 의존성 설치 → `py_compile` + 패키지 import 확인 → 단위 테스트(빠른 게이트) → 통합 테스트 → live 모드면 `--validate-models` → 실행(`--order` 인자 포함) → `outputs/`를 artifact로 업로드(30일 보관).
 
 R2는 web search를 보정 전후로 각각 호출한다. 즉 1주일에 R2 web search = 7건 × 최대 2회 = 14회까지. 비용은 `cost.pricing.web_search_per_1k_calls_usd` 기준으로 추정된다.
 
@@ -113,9 +127,13 @@ R2는 web search를 보정 전후로 각각 호출한다. 즉 1주일에 R2 web 
 
 ## 출력
 
+PASS 라벨이 파일명에 박힌다 (`spec` / `draft`).
+
 ```text
-outputs/YYYY-MM-DD_weekly-..._weekly_report.json
-outputs/YYYY-MM-DD_weekly-..._weekly_report.md
+outputs/YYYY-MM-DD_weekly-..._spec_weekly_report.json
+outputs/YYYY-MM-DD_weekly-..._spec_weekly_report.md
+outputs/YYYY-MM-DD_weekly-..._draft_weekly_report.json
+outputs/YYYY-MM-DD_weekly-..._draft_weekly_report.md
 ```
 
 JSON에는 `report.usage`가 포함된다.
@@ -124,8 +142,27 @@ JSON에는 `report.usage`가 포함된다.
 jq '.report.usage' outputs/*weekly_report.json
 ```
 
+## 명령 사용 예
+
+```bash
+# spec 생성 (제작지시서 7건)
+python weekly_blog_bot.py --order "블 (민+가+행) 7 ㄱㄱ"
+
+# draft 생성 (사람이 spec 검토 후, 통과한 한 건에 대한 변주 생성)
+python weekly_blog_bot.py --order "draft 콘텐츠 3 길이 풀+요약+핵심"
+python weekly_blog_bot.py --order "draft 콘텐츠 5 후보 A B C"
+
+# 명시 인자 (--order 텍스트 없이)
+python weekly_blog_bot.py --mode draft --parent-spec-id "콘텐츠 2" \
+    --axis 각도 --variants "증거 정리" "절차 흐름" "실패 사례"
+
+# dry-run / 모델 사전 검증
+python weekly_blog_bot.py --order "..." --dry-run
+python weekly_blog_bot.py --validate-models
+```
+
 ## 후속 라운드 예정 항목
 
-- 부분 보정: 보정이 7건 전체를 재생성하는 대신 partial/fail 항목만 재생성. 현재 schema가 `minItems:7, maxItems:7`이라 부분 보정 도입 시 별도 schema 분기 필요.
+- 부분 보정: 현재 spec 보정은 7건 전체를 재생성. draft 모드는 `minItems:1, maxItems:5`라 자연스럽게 부분 보정 가능. spec 측은 별도 schema 분기 필요.
 - web search 인용 메타 보존: Responses API output annotations(URL/title)을 reviewer payload에 보존. 현재는 자유 텍스트만 사용.
 
