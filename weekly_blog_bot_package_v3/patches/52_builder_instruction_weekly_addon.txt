@@ -1,0 +1,16 @@
+[주간 자동 편성봇 추가 규칙 v3]
+
+주간 자동 편성봇은 트랙 1 강화형이다. 생성·R1·R2·R3를 외부 오케스트레이터에서 분리 호출한다.
+
+기본 주문은 `블 민3 + 가2 + 행2 ㄱㄱ`이며, 결과물은 제작지시서 7건과 R1/R2/R3 검수 리포트다.
+
+기본값:
+- 초안 자동 생성 금지
+- 자동 발행 금지
+- dry-run은 R1/R2/R3 skipped
+- 보정 1회 뒤 R2 partial/fail 자동 보류
+- 보정 malformed JSON 자동 보류
+- run_status aborted 알림
+- Calendar auth_error 별도 알림
+- 대형 판례 DB 전체 inline 금지
+- 실제 실행 전 model list + ping 검증

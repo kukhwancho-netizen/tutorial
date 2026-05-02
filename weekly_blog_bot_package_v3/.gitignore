@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+.client_secret_from_env.json
+token.json
+outputs/

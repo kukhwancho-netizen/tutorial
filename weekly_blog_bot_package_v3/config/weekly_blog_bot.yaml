@@ -1,0 +1,151 @@
+bot_name: 주간 블로그 편성봇
+timezone: Asia/Seoul
+schedule_human: 매주 월요일 08:30 KST
+# GitHub Actions cron은 UTC 기준이다.
+# KST는 DST가 없다.
+# Monday 08:30 KST = Sunday 23:30 UTC = 30 23 * * 0
+
+order:
+  trigger_text: "블 민3 + 가2 + 행2 ㄱㄱ"
+  total_count: 7
+  channel: 블로그
+  distribution:
+    민사: 3
+    가사: 2
+    행정: 2
+  default_domains:
+    민사:
+      - 민사(건물하자)
+      - 민사(부동산)
+      - 민사(계약)
+    가사:
+      - 가사(상속/유류분)
+      - 가사(양육비)
+    행정:
+      - 행정
+      - 행정(인허가)
+
+openai:
+  # 2026-05-02 기준 OpenAI 공식 Models 문서에 노출된 모델 ID를 사용한다.
+  # 배포 전 weekly_blog_bot.py --validate-models 가 client.models.list()와 ping으로 재확인한다.
+  models:
+    generator: gpt-5.5
+    repair: gpt-5.4
+    report: gpt-5.4-mini
+    reviewers:
+      R1: gpt-5.4-mini
+      R2: gpt-5.5
+      R3: gpt-5.4-mini
+  max_output_tokens: 12000
+  use_web_search: true
+
+model_validation:
+  required_before_live_run: true
+  ping: true
+
+review:
+  separate_calls: true
+  reviewers:
+    - R1
+    - R2
+    - R3
+  max_repair_rounds: 1
+  block_high_risk: true
+  # 보정 1회 뒤 R2가 pass가 아니면 자동 보류한다.
+  post_repair_r2_partial_policy: auto_block
+  malformed_repair_policy: auto_block
+  require_human_approval_for:
+    - high_risk
+    - latest_law_uncertain
+    - official_source_missing
+    - duplicate_risk
+
+calendar:
+  enabled: true
+  calendar_id: primary
+  context_days: 90
+  max_results_per_query: 50
+  max_description_chars: 4000
+  query_terms:
+    counseling: "상담"
+    case_db: "케이스"
+    insight_db: "실무 인사이트"
+    completed_topic_db: "완료 주제"
+    performance_db: "성과"
+  write_result_event: true
+  result_event_prefix: "[주간봇결과]"
+  result_event_duration_minutes: 30
+  result_event_description_chars: 12000
+  # Calendar auth 실패는 코드에서 CalendarAuthError → main()의 abort 흐름을 통해 단일 채널 알림으로 처리된다.
+
+outputs:
+  directory: outputs
+  save_json: true
+  save_markdown: true
+  create_calendar_event: true
+
+notifications:
+  enabled: true
+  slack_webhook_env: SLACK_WEBHOOK_URL
+  notify_on:
+    - blocked
+    - needs_repair
+    - human_gate
+    - aborted
+    - auth_error
+    - payload_blocked
+    - malformed_json
+    - model_validation_failed
+  email:
+    enabled: false
+    smtp_host_env: SMTP_HOST
+    smtp_port_env: SMTP_PORT
+    smtp_user_env: SMTP_USER
+    smtp_password_env: SMTP_PASSWORD
+    from_env: ALERT_EMAIL_FROM
+    to_env: ALERT_EMAIL_TO
+
+human_review:
+  owner: 조국환 변호사팀 콘텐츠 담당자
+  review_deadline: 월요일 11:00 KST
+  escalation_deadline: 월요일 15:00 KST
+
+knowledge:
+  case_law:
+    # 참조_판례_정리본.txt 같은 대형 DB는 절대 통째로 주입하지 않는다.
+    mode: external_vector_store
+    never_inline_full_db: true
+    fallback_mode: local_keyword_rag
+    max_cases: 6
+    max_chars_per_case: 1800
+
+context_budget:
+  warn_input_tokens: 70000
+  block_input_tokens: 200000
+  measurement_method: "json payload character length / 4 conservative estimate"
+
+cost:
+  # 가격은 2026-05-02 기준 공식 가격표에서 가져온 운영 추정값이다.
+  # 공식 가격표가 바뀌면 운영자가 이 YAML을 갱신해야 한다.
+  pricing:
+    openai:
+      gpt-5.5:
+        input_per_1m_usd: 5.00
+        cached_input_per_1m_usd: 0.50
+        output_per_1m_usd: 30.00
+      gpt-5.4:
+        input_per_1m_usd: 2.50
+        cached_input_per_1m_usd: 0.25
+        output_per_1m_usd: 15.00
+      gpt-5.4-mini:
+        input_per_1m_usd: 0.75
+        cached_input_per_1m_usd: 0.075
+        output_per_1m_usd: 4.50
+    web_search_per_1k_calls_usd: 10.00
+
+safety:
+  no_auto_publish: true
+  no_client_identifiers: true
+  official_sources_first: true
+  add_handoff_block: true
+  run_draft_generation: false

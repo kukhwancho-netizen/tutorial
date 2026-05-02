@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewerResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reviewer", "verdict", "one_line_conclusion", "item_results", "batch_issues"],
+  "properties": {
+    "reviewer": {"type": "string", "enum": ["R1", "R2", "R3"]},
+    "verdict": {"type": "string", "enum": ["pass", "partial", "fail", "skipped"]},
+    "one_line_conclusion": {"type": "string", "minLength": 5, "maxLength": 250},
+    "item_results": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["temp_id", "status", "issues", "repair_instruction"],
+        "properties": {
+          "temp_id": {"type": "string", "pattern": "^콘텐츠 [1-7]$"},
+          "status": {"type": "string", "enum": ["pass", "partial", "fail", "skipped"]},
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["severity", "quote", "reason", "rule_ref"],
+              "properties": {
+                "severity": {"type": "string", "enum": ["경미", "중대", "치명"]},
+                "quote": {"type": "string", "minLength": 1},
+                "reason": {"type": "string", "minLength": 5},
+                "rule_ref": {"type": "string", "minLength": 2}
+              }
+            }
+          },
+          "repair_instruction": {"type": "string", "minLength": 5}
+        }
+      }
+    },
+    "batch_issues": {"type": "array", "items": {"type": "string"}}
+  }
+}
