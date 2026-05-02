@@ -3,6 +3,10 @@ name: Weekly Blog Bot
 on:
   workflow_dispatch:
     inputs:
+      order:
+        description: '명령 트리거 (예: "블 (민+가+행) 7 ㄱㄱ" / "draft 콘텐츠 3 길이 풀+요약+핵심"). 비우면 기본 spec 모드.'
+        type: string
+        default: ""
       dry_run:
         description: "true면 API/Calendar 호출 없이 sample report만 생성"
         type: boolean
@@ -11,10 +15,6 @@ on:
         description: "true면 Calendar 읽기/쓰기 비활성화"
         type: boolean
         default: false
-  schedule:
-    # GitHub Actions cron은 UTC 기준이다. KST는 DST가 없다.
-    # Monday 08:30 KST = Sunday 23:30 UTC
-    - cron: "30 23 * * 0"
 
 permissions:
   contents: read
@@ -27,9 +27,7 @@ jobs:
   weekly:
     name: weekly run
     runs-on: ubuntu-latest
-    # cron에서는 vars.ENABLE_WEEKLY_CRON=='true'일 때만 실행한다.
-    # workflow_dispatch는 이 게이트를 무시한다.
-    if: ${{ github.event_name == 'workflow_dispatch' || vars.ENABLE_WEEKLY_CRON == 'true' }}
+    # 명령 봇 모델: workflow_dispatch만 정상 경로. cron 자동 실행은 제거됨.
     defaults:
       run:
         working-directory: weekly_blog_bot_package_v3
@@ -78,7 +76,8 @@ jobs:
           ARGS="--config config/weekly_blog_bot.yaml"
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
           if [ "${{ inputs.no_calendar }}" = "true" ]; then ARGS="$ARGS --no-calendar"; fi
-          python weekly_blog_bot.py $ARGS
+          if [ -n "${{ inputs.order }}" ]; then ARGS="$ARGS --order \"${{ inputs.order }}\""; fi
+          eval python weekly_blog_bot.py $ARGS
 
       - name: Upload outputs
         if: always()
