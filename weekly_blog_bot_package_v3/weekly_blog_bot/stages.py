@@ -5,9 +5,7 @@
 """
 from __future__ import annotations
 
-import datetime as dt
 import json
-import os
 import sys
 import uuid
 from typing import Any, Dict
@@ -30,7 +28,6 @@ from .pass_def import SPEC_PASS, BatchPass
 from .reporting import build_report_from_data, render_report_markdown
 from .settings import (
     REVIEWERS,
-    iso,
     load_environment,
     load_json,
     load_text,

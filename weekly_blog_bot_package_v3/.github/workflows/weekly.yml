@@ -72,12 +72,17 @@ jobs:
         run: python weekly_blog_bot.py --config config/weekly_blog_bot.yaml --validate-models --no-calendar
 
       - name: Run weekly bot
+        env:
+          # 명령 트리거를 env로 전달해 쉘 인자 분해/인젝션을 차단한다.
+          ORDER: ${{ inputs.order }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          NO_CALENDAR: ${{ inputs.no_calendar }}
         run: |
-          ARGS="--config config/weekly_blog_bot.yaml"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          if [ "${{ inputs.no_calendar }}" = "true" ]; then ARGS="$ARGS --no-calendar"; fi
-          if [ -n "${{ inputs.order }}" ]; then ARGS="$ARGS --order \"${{ inputs.order }}\""; fi
-          eval python weekly_blog_bot.py $ARGS
+          ARGS=("--config" "config/weekly_blog_bot.yaml")
+          [ "$DRY_RUN" = "true" ] && ARGS+=("--dry-run")
+          [ "$NO_CALENDAR" = "true" ] && ARGS+=("--no-calendar")
+          [ -n "$ORDER" ] && ARGS+=("--order" "$ORDER")
+          python weekly_blog_bot.py "${ARGS[@]}"
 
       - name: Upload outputs
         if: always()

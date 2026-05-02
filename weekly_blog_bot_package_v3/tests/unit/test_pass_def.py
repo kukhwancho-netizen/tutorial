@@ -15,6 +15,20 @@ from weekly_blog_bot.pass_def import (
 )
 
 
+# ---------- 패키지 레벨 재노출 ----------
+
+def test_top_level_reexports_pass_symbols():
+    """`import weekly_blog_bot as bot` 사용자가 PASS/Order API에 접근할 수 있어야 한다."""
+    import weekly_blog_bot as bot
+    expected = {
+        "BatchPass", "SPEC_PASS", "DRAFT_PASS", "PASS_BY_NAME",
+        "OrderSpec", "OrderParseError",
+        "parse_order", "order_from_args", "pass_for",
+    }
+    missing = [name for name in expected if not hasattr(bot, name)]
+    assert not missing, f"missing top-level re-exports: {missing}"
+
+
 # ---------- BatchPass / dispatch ----------
 
 def test_pass_for_dispatches_by_mode():
