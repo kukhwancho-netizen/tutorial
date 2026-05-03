@@ -126,7 +126,7 @@ def build_report_from_data(
     for item in spec["items"]:
         temp_id = item["temp_id"]
         item_reviews = {r: by_reviewer[r][temp_id] for r in by_reviewer}
-        gate = bool(item["risk"].get("human_gate_required"))
+        gate = bool(item["risk"].get("human_gate_required", False))
         if gate:
             human_gate += 1
 
@@ -151,12 +151,12 @@ def build_report_from_data(
         )
         items_out.append({
             "temp_id": temp_id,
-            "domain": item["domain"],
-            "topic": item["topic"],
+            "domain": _item_domain(item, spec),
+            "topic": _item_topic(item),
             "final_status": final_status,
             "risk": item["risk"]["level"],
             "review_summary": review_summary,
-            "spec_markdown": render_spec_item_markdown(item),
+            "spec_markdown": render_item_markdown(item),
         })
 
     usage_by_model = usage_by_model or {}
@@ -287,7 +287,58 @@ def next_actions_for_summary(publish: int, repair: int, blocked: int, skipped: i
     return actions or ["처리할 후속 액션 없음"]
 
 
-# ---------- 마크다운 렌더 ----------
+# ---------- 마크다운 렌더 (검수 있는 PASS, 현재는 draft) ----------
+
+def _is_draft_item(item: Dict[str, Any]) -> bool:
+    return "axis_value" in item
+
+
+def _item_topic(item: Dict[str, Any]) -> str:
+    return item.get("topic") or item.get("title") or item.get("temp_id", "")
+
+
+def _item_domain(item: Dict[str, Any], spec: Dict[str, Any]) -> str:
+    if "domain" in item:
+        return item["domain"]
+    axis = spec.get("axis")
+    return f"draft·{axis}" if axis else "draft"
+
+
+def render_item_markdown(item: Dict[str, Any]) -> str:
+    """검수 PASS의 item 1건. draft 변주를 렌더."""
+    if _is_draft_item(item):
+        return render_draft_item_markdown(item)
+    # 이 경로는 현재 사용되지 않음 (spec은 sketch 경로). 호환을 위해 남김.
+    return render_spec_item_markdown(item)
+
+
+def render_draft_item_markdown(item: Dict[str, Any]) -> str:
+    outline = "\n".join(f"{idx+1}. {x}" for idx, x in enumerate(item["body_outline"]))
+    paragraphs = "\n\n".join(item["body_paragraphs"])
+    claims = "\n".join(
+        f"- ({c['tag']}) {c['value']} — {c['source']}" for c in item.get("claims", [])
+    )
+    lt = item.get("length_target", {})
+    return "\n".join([
+        f"### {item['temp_id']} — {item.get('title', '')}",
+        "",
+        f"- 축값: {item.get('axis_value', '')}",
+        f"- 톤: {item.get('tone_profile', '')}",
+        f"- 길이 목표: {lt.get('min_chars', '?')}~{lt.get('max_chars', '?')}자",
+        f"- 위험도: {item['risk']['level']} / 사람 확인: {item['risk']['human_gate_required']}",
+        f"- lede: {item.get('lede', '')}",
+        "",
+        "구성안:",
+        outline,
+        "",
+        "본문:",
+        "",
+        paragraphs,
+        "",
+        "근거:",
+        claims,
+    ])
+
 
 def render_spec_item_markdown(item: Dict[str, Any]) -> str:
     must = "\n".join(f"- {x}" for x in item["must_include"])

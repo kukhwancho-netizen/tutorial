@@ -49,18 +49,42 @@ SPEC_PASS = BatchPass(
     has_calendar_write=False,
 )
 
-PASS_BY_NAME: Dict[str, BatchPass] = {SPEC_PASS.name: SPEC_PASS}
+DRAFT_PASS = BatchPass(
+    name="draft",
+    schema_name="WeeklyDraftBatch",
+    schema_file="draft_batch.schema.json",
+    generator_prompt_file="11_draft_generator_system.md",
+    reviewer_prompt_files={
+        "R1": "23_reviewer_r1_draft.md",
+        "R2": "24_reviewer_r2_draft.md",
+        "R3": "25_reviewer_r3_draft.md",
+    },
+    repair_prompt_file="31_repair_draft_system.md",
+    decision_rules=decision.SPEC_RULES,
+    use_web_search=True,
+    output_label="draft",
+    report_schema_file="final_report.schema.json",
+    has_review=True,
+    has_calendar_write=True,
+)
+
+PASS_BY_NAME: Dict[str, BatchPass] = {SPEC_PASS.name: SPEC_PASS, DRAFT_PASS.name: DRAFT_PASS}
 
 
 @dataclass(frozen=True)
 class OrderSpec:
-    """명령 1건. 본 라운드는 spec 모드만 지원한다."""
+    """명령 1건. spec 또는 draft."""
 
-    mode: str                               # "spec"
+    mode: str                               # "spec" | "draft"
     raw: str
+    # spec
     channel: Optional[str] = None
     distribution: Tuple[str, ...] = ()
     total: int = 7
+    # draft
+    parent_spec_id: Optional[str] = None    # "콘텐츠 3"
+    axis: Optional[str] = None              # "각도" | "길이" | "후보" | "버전"
+    variants: Tuple[str, ...] = ()
 
 
 def pass_for(order: OrderSpec) -> BatchPass:
@@ -77,9 +101,6 @@ def pass_for(order: OrderSpec) -> BatchPass:
 _SPEC_TRIGGER_RE = re.compile(
     r"^\s*(?P<channel>블|홈)\s*\(?(?P<dist>[\w가-힣\s,+]+?)\)?\s+(?P<total>\d+)\b",
 )
-# draft 트리거는 본 라운드에서 명시적으로 거부 (조용한 spec 폴백 방지)
-_DRAFT_TRIGGER_PREFIX = re.compile(r"^\s*draft\b")
-
 _CHANNEL_LONG = {"블": "블로그", "홈": "홈페이지"}
 _DOMAIN_LONG = {"민": "민사", "가": "가사", "행": "행정", "형": "형사"}
 
@@ -88,13 +109,26 @@ class OrderParseError(ValueError):
     """명령 문자열을 파싱할 수 없을 때."""
 
 
+_DRAFT_TRIGGER_RE = re.compile(
+    r"^\s*draft\s+(?P<parent>콘텐츠\s*[1-9][0-9]?)\s+"
+    r"(?P<axis>각도|길이|후보|버전)\s+(?P<variants>.+?)\s*$",
+)
+
+
 def parse_order(text: str) -> OrderSpec:
     raw = (text or "").strip()
     if not raw:
         raise OrderParseError("empty order")
-    if _DRAFT_TRIGGER_PREFIX.match(raw):
-        raise OrderParseError(
-            "draft mode not supported in this round; defer to next phase"
+    m = _DRAFT_TRIGGER_RE.match(raw)
+    if m:
+        parent = re.sub(r"\s+", " ", m.group("parent")).strip()
+        variants_text = m.group("variants").strip()
+        variants = tuple(v for v in re.split(r"[+,\s]+", variants_text) if v)
+        if not variants:
+            raise OrderParseError(f"draft order without variants: {raw!r}")
+        return OrderSpec(
+            mode="draft", raw=raw,
+            parent_spec_id=parent, axis=m.group("axis"), variants=variants,
         )
     m = _SPEC_TRIGGER_RE.match(raw)
     if not m:
@@ -111,8 +145,19 @@ def parse_order(text: str) -> OrderSpec:
     )
 
 
-def order_from_args(*, mode: str, raw: str = "", **_unused) -> OrderSpec:
-    """CLI --mode 인자용. 본 라운드는 spec 외 거부."""
-    if mode != "spec":
-        raise OrderParseError(f"mode {mode!r} not supported in this round")
-    return OrderSpec(mode="spec", raw=raw or "spec")
+def order_from_args(*, mode: str, raw: str = "",
+                    parent_spec_id: Optional[str] = None,
+                    axis: Optional[str] = None,
+                    variants: Tuple[str, ...] = ()) -> OrderSpec:
+    """CLI 명시 인자용."""
+    if mode == "spec":
+        return OrderSpec(mode="spec", raw=raw or "spec")
+    if mode == "draft":
+        if not (parent_spec_id and axis and variants):
+            raise OrderParseError("draft mode requires parent_spec_id + axis + variants")
+        return OrderSpec(
+            mode="draft",
+            raw=raw or f"draft {parent_spec_id} {axis} {' '.join(variants)}",
+            parent_spec_id=parent_spec_id, axis=axis, variants=tuple(variants),
+        )
+    raise OrderParseError(f"unknown mode: {mode!r}")

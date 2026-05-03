@@ -10,14 +10,14 @@
     "one_line_conclusion": {"type": "string", "minLength": 5, "maxLength": 250},
     "item_results": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 1,
+      "maxItems": 14,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["temp_id", "status", "issues", "repair_instruction"],
         "properties": {
-          "temp_id": {"type": "string", "pattern": "^콘텐츠 [1-7]$"},
+          "temp_id": {"type": "string", "pattern": "^콘텐츠 [1-9][0-9]?(\\.[A-Za-z0-9가-힣]+)?$"},
           "status": {"type": "string", "enum": ["pass", "partial", "fail", "skipped"]},
           "issues": {
             "type": "array",

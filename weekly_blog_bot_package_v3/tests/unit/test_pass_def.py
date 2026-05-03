@@ -8,6 +8,7 @@ import pytest
 
 from weekly_blog_bot import pass_def
 from weekly_blog_bot.pass_def import (
+    DRAFT_PASS,
     SPEC_PASS,
     OrderParseError,
     OrderSpec,
@@ -19,17 +20,30 @@ from weekly_blog_bot.pass_def import (
 
 # ---------- BatchPass / dispatch ----------
 
-def test_pass_for_dispatches_spec():
+def test_pass_for_dispatches_by_mode():
     assert pass_for(OrderSpec(mode="spec", raw="x")) is SPEC_PASS
+    assert pass_for(OrderSpec(mode="draft", raw="x")) is DRAFT_PASS
 
 
 def test_pass_for_unknown_mode_raises():
     with pytest.raises(OrderParseError):
-        pass_for(OrderSpec(mode="draft", raw="x"))
+        pass_for(OrderSpec(mode="bogus", raw="x"))
 
 
-def test_pass_by_name_table_only_has_spec():
-    assert set(pass_def.PASS_BY_NAME) == {"spec"}
+def test_pass_by_name_table_has_spec_and_draft():
+    assert set(pass_def.PASS_BY_NAME) == {"spec", "draft"}
+
+
+def test_spec_pass_is_sketch_only():
+    assert SPEC_PASS.has_review is False
+    assert SPEC_PASS.has_calendar_write is False
+
+
+def test_draft_pass_is_full_pipeline():
+    assert DRAFT_PASS.has_review is True
+    assert DRAFT_PASS.has_calendar_write is True
+    assert set(DRAFT_PASS.reviewer_prompt_files) == {"R1", "R2", "R3"}
+    assert DRAFT_PASS.repair_prompt_file is not None
 
 
 # ---------- 패키지 레벨 재노출 ----------
@@ -76,11 +90,18 @@ def test_parse_order_garbage_raises():
         parse_order("aimless text without channel")
 
 
-def test_parse_order_draft_trigger_explicitly_rejected():
-    """draft 형식은 본 라운드에서 명시적 거부 — 조용히 spec로 폴백되면 위험."""
-    with pytest.raises(OrderParseError) as excinfo:
-        parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
-    assert "draft" in str(excinfo.value)
+def test_parse_order_draft_plus_form():
+    o = parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
+    assert o.mode == "draft"
+    assert o.parent_spec_id == "콘텐츠 3"
+    assert o.axis == "길이"
+    assert o.variants == ("풀", "요약", "핵심")
+
+
+def test_parse_order_draft_space_form():
+    o = parse_order("draft 콘텐츠 5 후보 A B C")
+    assert o.mode == "draft"
+    assert o.variants == ("A", "B", "C")
 
 
 def test_parse_order_spec_zero_total_raises():
@@ -106,9 +127,19 @@ def test_order_from_args_unknown_mode_raises():
         order_from_args(mode="bogus")
 
 
-def test_order_from_args_draft_rejected_in_this_round():
+def test_order_from_args_draft_full():
+    o = order_from_args(
+        mode="draft", parent_spec_id="콘텐츠 2", axis="각도",
+        variants=("증거 정리", "절차 흐름", "실패 사례"),
+    )
+    assert o.mode == "draft"
+    assert o.parent_spec_id == "콘텐츠 2"
+    assert o.variants == ("증거 정리", "절차 흐름", "실패 사례")
+
+
+def test_order_from_args_draft_missing_required_raises():
     with pytest.raises(OrderParseError):
-        order_from_args(mode="draft")
+        order_from_args(mode="draft", parent_spec_id="콘텐츠 1")  # axis/variants 누락
 
 
 # ---------- BatchPass file references resolve ----------

@@ -41,9 +41,51 @@ def test_spec_dry_run_produces_sketch_report(tmp_path, bot_module, cfg, root_pat
         assert "domain" not in item        # 슬림 sketch에 없음
 
 
-def test_draft_order_explicitly_rejected(bot_module):
-    """draft 형식 트리거는 본 라운드에서 명시적으로 거부된다."""
+def test_draft_dry_run_produces_final_report(tmp_path, bot_module, cfg, root_path):
+    """draft + dry-run이 abort 없이 끝나고 _draft_ 라벨로 저장된다."""
     bot = bot_module
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    for name in ("schemas", "prompts"):
+        target = tmp_path / name
+        if not target.exists():
+            target.symlink_to(root_path / name, target_is_directory=True)
+    cfg["outputs"]["directory"] = "outputs"
+    cfg["calendar"]["enabled"] = False
+    cfg["outputs"]["create_calendar_event"] = False
+    cfg["notifications"]["enabled"] = False
+    cfg_path = tmp_path / "config" / "weekly_blog_bot.yaml"
+    cfg_path.write_text(__import__("yaml").safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+
+    order = bot.parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
+    result = bot.run(cfg_path, dry_run=True, no_calendar=True, order=order)
+    assert result["run_status"] == "dry_run"
+    assert result["pass"] == "draft"
+    json_path = pathlib.Path(result["json_path"])
+    assert "_draft_" in json_path.name
+    data = bot.load_json(json_path)
+    # draft sample = 1 variant.
+    assert len(data["spec_batch"]["items"]) == 1
+    assert data["spec_batch"]["items"][0]["temp_id"].startswith("콘텐츠 1.")
+    for review in data["reviews"].values():
+        assert len(review["item_results"]) == 1
+
+
+def test_draft_live_without_parent_spec_aborts(tmp_path, bot_module, cfg, root_path):
+    """draft live는 outputs/에 spec 결과가 없으면 명확히 abort."""
+    bot = bot_module
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    for name in ("schemas", "prompts"):
+        target = tmp_path / name
+        if not target.exists():
+            target.symlink_to(root_path / name, target_is_directory=True)
+    cfg["outputs"]["directory"] = "outputs"
+    cfg["calendar"]["enabled"] = False
+    cfg["notifications"]["enabled"] = False
+    cfg_path = tmp_path / "config" / "weekly_blog_bot.yaml"
+    cfg_path.write_text(__import__("yaml").safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+
+    order = bot.parse_order("draft 콘텐츠 3 길이 풀")
     import pytest
-    with pytest.raises(bot.OrderParseError):
-        bot.parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
+    with pytest.raises(bot.PipelineAbort) as excinfo:
+        bot.run(cfg_path, dry_run=False, no_calendar=True, order=order)
+    assert "spec output" in str(excinfo.value)
