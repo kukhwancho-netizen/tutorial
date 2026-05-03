@@ -1,79 +1,106 @@
 # 아키텍처
 
-## 흐름
+## 3-PASS 명령 봇
+
+세 가지 명령이 같은 파이프라인 골격을 공유하지만, PASS의 capability flag(`has_generation` / `has_review` / `has_calendar_write`)로 단계가 켜지고 꺼진다.
 
 ```text
-GitHub Actions workflow_dispatch (운영자 수동 트리거 — cron 자동 실행 없음)
+GitHub Actions workflow_dispatch (운영자 수동 트리거 — cron 없음)
   ↓
-weekly_blog_bot.py (얇은 진입점)
+weekly_blog_bot.py → cli.main() → runner.run(order)
   ↓
-weekly_blog_bot.cli.main()
+  pass_for(order) ∈ { SPEC_PASS, DRAFT_PASS, EDIT_PASS }
   ↓
-weekly_blog_bot.runner.run()
-  ↓ stage_prepare           (env + config + paths + run_id)
-  ↓ stage_dry_run             OR     stage_validate_models_if_required
-  ↓                                  stage_fetch_calendar
-  ↓                                  stage_generate_spec
-  ↓                                  stage_review        (R1/R2/R3)
-  ↓                                  stage_repair_if_needed (최대 1회)
-  ↓ stage_build_report      (decision matrix 적용 + temp_id 검증)
-  ↓ stage_persist           (JSON + Markdown to outputs/)
-  ↓ stage_write_calendar    (live만)
-  ↓ stage_notify            (blocked/needs_repair/human_gate/aborted/...)
+  stage_prepare
+    ├─ spec   : (sketch 스키마 로드, no parent, no source)
+    ├─ draft  : + parent_spec_item 디스크 로드 (outputs/*_spec_*.json)
+    └─ edit   : + 기존 draft batch 디스크 로드 (target_temp_id 매칭)
   ↓
-abort 시 → cli.main()의 except → stages.write_abort_report()
+  if dry_run: stage_dry_run (PASS별 샘플)
+  else:
+    stage_validate_models_if_required        (생성/검수 PASS만)
+    stage_fetch_calendar                     (spec, draft만 — edit는 스킵)
+    if pass_.has_generation: stage_generate  (edit는 스킵 — 사용자 편집 그대로)
+    if pass_.has_review:
+      stage_review              (R1/R2/R3 순차)
+      stage_repair_if_needed    (1회 보정)
+  ↓
+  stage_build_report  (sketch_report or final_report)
+  stage_persist       (outputs/_{spec|draft|edit}_weekly_report.{json,md})
+  if pass_.has_calendar_write: stage_write_calendar
+  stage_notify
+  ↓
+  abort 시: cli except → stages.write_abort_report (pass_label 라벨 박힘)
 ```
+
+## PASS별 capability
+
+| PASS | has_generation | has_review | has_calendar_write | output_label | report_schema |
+|---|:---:|:---:|:---:|---|---|
+| SPEC | ✓ | ✗ | ✗ | spec | sketch_report.schema |
+| DRAFT | ✓ | ✓ | ✓ | draft | final_report.schema |
+| EDIT | ✗ | ✓ | ✓ | edit | final_report.schema |
 
 ## 모듈 책임 분리
 
 | 모듈 | 책임 |
 |---|---|
-| `runner` | 단계 순서 보장. 비즈니스 로직 없음. |
-| `stages` | 각 단계 함수. 외부 호출은 adapters에 위임. |
-| `decision` | 최종 상태 의사결정 표 (`RULES`). 우선순위 순. |
-| `reporting` | 리포트 빌드 + 비용 추정 + 마크다운 렌더 + temp_id 검증. |
+| `runner` | PASS capability 디스패치. 단계 순서 보장. |
+| `stages` | 단계 함수. 외부 호출은 adapters에 위임. parent_spec/draft 로더 포함. |
+| `pass_def` | BatchPass(spec/draft/edit) 정의. OrderSpec dataclass. parse_order. |
+| `decision` | 최종 상태 의사결정 표 (`RULES`/`SPEC_RULES`). |
+| `reporting` | sketch report / draft·edit final report. 마크다운 렌더 (spec sketch / draft 변주 분리). |
 | `budget` | tiktoken/CJK 휴리스틱 토큰 추정 + 컨텍스트 예산 가드. |
-| `dry_run` | dry-run 샘플 데이터 + fallback reviewer 빌더. |
-| `settings` | config/env/경로 로드, 모델 ID 결정, 모델 facing config. |
-| `domain` | StageContext, UsageByModel, ModelCallResult. |
-| `result` | Result/Ok/Err + abort 카테고리. |
-| `cli` | argparse + abort 핸들러. |
-| `adapters/openai_client` | Responses API 호출, 스키마 sanitizer, 모델 검증. |
-| `adapters/calendar` | Google Calendar OAuth + 이벤트 검색·쓰기. |
-| `adapters/notifications` | Slack + 이메일 (STARTTLS/SMTPS 모두 지원). |
+| `dry_run` | spec sketch + draft 변주 샘플 + fallback reviewer 빌더. |
+| `settings` | config/env/경로 로드, 모델 ID 결정, model_facing config. |
+| `domain` | StageContext, UsageByModel, ModelCallResult, Result, abort 카테고리. |
+| `cli` | argparse(`--order` + `--dry-run`/`--no-calendar`/`--validate-models`) + abort 핸들러. |
+| `adapters/openai_client` | Responses API + 스키마 sanitizer + 모델 검증. |
+| `adapters/calendar` | Google Calendar OAuth + 이벤트 쓰기. |
+| `adapters/notifications` | Slack + 이메일 (STARTTLS/SMTPS). |
 
-## 설계 고정값
+## 의사결정 표 (decision.RULES — draft·edit에 적용)
 
-- 생성과 검수는 분리 호출한다.
-- R1/R3는 기본적으로 `gpt-5.4-mini`로 낮춘다.
-- R2는 최신성·법률 리스크 때문에 `gpt-5.5`를 유지한다.
-- dry-run은 검수 verdict를 `skipped`로 둔다.
-- 검수 분기 회귀는 `tests/unit/test_decision_matrix.py`가 담당한다.
-- `temp_id` 중복·누락 방어는 `reporting._coverage_check_or_fix()`가 담당한다.
-
-## 실패 모드
-
-| 실패 모드 | 처리 | 알림 카테고리 |
-|---|---|---|
-| model_not_found | `--validate-models` 사전 차단 | `model_validation_failed` |
-| Calendar OAuth 실패 | abort. 단일 채널 알림. | `auth_error` |
-| 컨텍스트 토큰 초과 | `enforce_context_budget`이 abort | `payload_blocked` |
-| 생성 JSON malformed | abort report 후 알림 | `malformed_json` |
-| 검수 JSON malformed | 해당 reviewer fail fallback | (보고서에 batch_issues로 표시) |
-| 보정 JSON malformed | R2 fail fallback → 자동 보류 | (보고서에 표시) |
-| 보정 뒤 R2 partial/fail | 자동 보류 (decision matrix 규칙) | `blocked` |
-| 검수 결과 temp_id 중복/누락 | 해당 reviewer fail fallback (KeyError 차단) | (보고서에 표시) |
-| `block_high_risk=true`이고 risk=high | 자동 보류 | `blocked` |
-| `block_high_risk=false`이고 risk=high | human_gate 흐름으로 (다른 결함이 없으면 통과 가능) | `human_gate` |
-
-## 의사결정 표
-
-`decision.RULES` (우선순위 순):
+위에서부터 첫 매치 적용:
 
 1. 모든 검수자 status가 `skipped` → `검수 생략(dry-run)`
-2. `block_high_risk=true`이고 `risk_level == "high"` → `보류`
-3. `item.status == "blocked"` → `보류`
+2. `block_high_risk=true`이고 `risk_level=high` → `보류`
+3. `item.status=blocked` → `보류`
 4. 어떤 검수자라도 `fail` → `보류`
-5. 보정 시도됐고 R2가 `pass`가 아님 → `보류`
+5. 보정 시도 후 R2가 `pass`가 아님 → `보류`
 6. `partial`이 하나라도 있거나 사람 게이트 켜짐 → `수정 필요`
 7. 그 외 → `통과`
+
+## abort 카테고리
+
+| 카테고리 | 발생 |
+|---|---|
+| `aborted` | 일반 (parent_spec/draft 로드 실패 포함) |
+| `auth_error` | Calendar OAuth 등 |
+| `openai_error` | OpenAI API 호출 실패 |
+| `calendar_error` | 캘린더 일반 |
+| `malformed_json` | 응답 JSON 파싱/스키마 실패 |
+| `payload_blocked` | 컨텍스트 예산 초과 |
+| `model_validation_failed` | `--validate-models` 사전 검사 실패 |
+
+각 카테고리는 알림 트리거(`notify_on`)와 1:1 대응. abort 파일명에 `pass_label`이 박혀 spec/draft/edit이 동시각에 abort해도 구분 가능.
+
+## 사용자 편집 루프 (핵심 운영 패턴)
+
+```
+spec 명령
+  ↓ outputs/_spec_weekly_report.{json,md}  (4필드 토픽 N건)
+사람: spec.md 읽고 어느 토픽으로 갈지 결정
+  ↓
+draft 콘텐츠 N <axis> <variants>
+  ↓ outputs/_draft_weekly_report.{json,md}  (본문 변주 N건 + R1/R2/R3 + 보정)
+사람: draft.json의 body_paragraphs/lede/title 편집 (반복 가능)
+  ↓
+edit 콘텐츠 N.X
+  ↓ outputs/_edit_weekly_report.{json,md}  (편집본 R1/R2/R3 + 보정)
+사람: edit 결과 보고 다시 편집 → 또 edit  (사이클)
+  ↓
+사람이 만족 → 발행
+```
+
+압력 분배: spec은 가볍고(메타·검수 0), draft는 본문 생성 비용이 들지만 1회, edit는 검수만 (생성 비용 0). 사람 손이 가장 자주 닿는 곳에 비용이 가장 적게 든다.
