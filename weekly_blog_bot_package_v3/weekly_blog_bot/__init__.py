@@ -30,6 +30,7 @@ from .decision import (  # noqa: F401
 )
 from .domain import ModelCallResult, StageContext, UsageByModel  # noqa: F401
 from .dry_run import (  # noqa: F401
+    make_dry_run_draft,
     make_dry_run_review,
     make_dry_run_spec,
     make_fallback_reviewer_result,
@@ -39,6 +40,8 @@ from .reporting import (  # noqa: F401
     estimate_cost_usd,
     merge_usage,
     next_actions_for_summary,
+    render_draft_item_markdown,
+    render_item_markdown,
     render_report_markdown,
     render_spec_item_markdown,
 )

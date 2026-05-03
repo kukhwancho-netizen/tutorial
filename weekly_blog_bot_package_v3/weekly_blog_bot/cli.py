@@ -19,7 +19,7 @@ from typing import Optional
 
 from . import runner, stages
 from .adapters.openai_client import validate_configured_models
-from .pass_def import OrderSpec, order_from_args, parse_order
+from .pass_def import OrderSpec, order_from_args, parse_order, pass_for
 
 
 def _build_order(args: argparse.Namespace) -> Optional[OrderSpec]:
@@ -33,6 +33,16 @@ def _build_order(args: argparse.Namespace) -> Optional[OrderSpec]:
             variants=tuple(args.variants or ()),
         )
     return None
+
+
+def _pass_label_from_order(order: Optional[OrderSpec]) -> Optional[str]:
+    """abort 파일명용 라벨. order가 None이면 runner가 spec PASS를 기본으로 쓰므로 'spec'."""
+    if order is None:
+        return "spec"
+    try:
+        return pass_for(order).output_label
+    except KeyError:
+        return None
 
 
 def main() -> None:
@@ -59,6 +69,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config_path = pathlib.Path(args.config).resolve()
+    order: Optional[OrderSpec] = None
     try:
         if args.validate_models:
             result = validate_configured_models(config_path, ping=not args.skip_model_ping)
@@ -74,7 +85,9 @@ def main() -> None:
     except Exception as exc:
         # write_abort_report 자체 실패에도 원래 abort 원인이 stderr에 남도록 감싼다.
         try:
-            abort_result = stages.write_abort_report(config_path, exc)
+            abort_result = stages.write_abort_report(
+                config_path, exc, pass_label=_pass_label_from_order(order)
+            )
             print(json.dumps(abort_result, ensure_ascii=False, indent=2), file=sys.stderr)
         except Exception as report_exc:
             print(

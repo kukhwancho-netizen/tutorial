@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import sys
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .adapters import calendar as calendar_adapter
 from .adapters import notifications
@@ -323,8 +323,13 @@ def stage_notify(ctx: StageContext) -> StageContext:
 
 # ---------- abort 리포트 ----------
 
-def write_abort_report(config_path, exc: Exception) -> Dict[str, Any]:
-    """abort 시 최소한의 결과 파일을 남기고 알림을 보낸다."""
+def write_abort_report(config_path, exc: Exception, *,
+                       pass_label: Optional[str] = None) -> Dict[str, Any]:
+    """abort 시 최소한의 결과 파일을 남기고 알림을 보낸다.
+
+    pass_label이 주어지면 abort 파일명에도 spec/draft 라벨이 박혀, 같은 시각에
+    여러 PASS가 abort했을 때 구분 가능하다.
+    """
     config = load_yaml(config_path) if config_path.exists() else {}
     paths = make_paths(config_path, config)
     paths.outputs.mkdir(parents=True, exist_ok=True)
@@ -349,9 +354,20 @@ def write_abort_report(config_path, exc: Exception) -> Dict[str, Any]:
         "items": [],
         "next_actions": ["aborted 원인을 확인하고, 필요 시 OAuth·모델 ID·컨텍스트 예산을 수정한다."],
     }
+    # final_report.schema.json에 abort 모양도 통과하도록 error를 옵셔널 필드로 둔다.
+    # 검증이 가능하면 시도하되, 스키마 로드 실패는 abort 경로를 막지 않는다.
+    try:
+        schema = load_json(paths.schemas / "final_report.schema.json")
+        validate_json(schema, report, "WeeklyFinalReport(aborted)")
+    except Exception as schema_exc:  # noqa: BLE001 — abort 경로는 추가 abort를 던지지 않는다
+        report["next_actions"].append(
+            f"abort report schema 검증 실패(무시): {schema_exc}"
+        )
+
     date_part = basis.strftime("%Y-%m-%d")
-    json_path = paths.outputs / f"{date_part}_{run_id}_abort_report.json"
-    md_path = paths.outputs / f"{date_part}_{run_id}_abort_report.md"
+    label = f"_{pass_label}" if pass_label else ""
+    json_path = paths.outputs / f"{date_part}_{run_id}{label}_abort_report.json"
+    md_path = paths.outputs / f"{date_part}_{run_id}{label}_abort_report.md"
     write_json(json_path, {"report": report})
     md_path.write_text(
         f"# 주간 블로그 봇 중단 보고 — {date_part}\n\n"

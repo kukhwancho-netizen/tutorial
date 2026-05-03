@@ -236,25 +236,27 @@ def render_draft_item_markdown(item: Dict[str, Any]) -> str:
         f"- ({c['tag']}) {c['value']} — {c['source']}" for c in item.get("claims", [])
     )
     lt = item.get("length_target", {})
-    return textwrap.dedent(f"""
-    ### {item['temp_id']} — {item.get('title', '')}
-
-    - 축값: {item.get('axis_value', '')}
-    - 톤: {item.get('tone_profile', '')}
-    - 길이 목표: {lt.get('min_chars', '?')}~{lt.get('max_chars', '?')}자
-    - 위험도: {item['risk']['level']} / 사람 확인: {item['risk']['human_gate_required']}
-    - lede: {item.get('lede', '')}
-
-    구성안:
-    {outline}
-
-    본문:
-
-    {paragraphs}
-
-    근거:
-    {claims}
-    """).strip()
+    # textwrap.dedent를 쓰지 않는 이유: paragraphs가 다중행이라 공통 leading whitespace
+    # 계산이 깨진다. 평문 join이 가장 안전.
+    return "\n".join([
+        f"### {item['temp_id']} — {item.get('title', '')}",
+        "",
+        f"- 축값: {item.get('axis_value', '')}",
+        f"- 톤: {item.get('tone_profile', '')}",
+        f"- 길이 목표: {lt.get('min_chars', '?')}~{lt.get('max_chars', '?')}자",
+        f"- 위험도: {item['risk']['level']} / 사람 확인: {item['risk']['human_gate_required']}",
+        f"- lede: {item.get('lede', '')}",
+        "",
+        "구성안:",
+        outline,
+        "",
+        "본문:",
+        "",
+        paragraphs,
+        "",
+        "근거:",
+        claims,
+    ])
 
 
 def render_spec_item_markdown(item: Dict[str, Any]) -> str:
@@ -303,7 +305,7 @@ def render_report_markdown(report: Dict[str, Any], reviews: Optional[Dict[str, A
         f"- dry-run 검수 생략: {summary['dry_run_skipped']}",
         f"- estimated_cost_usd: {usage.get('estimated_cost_usd', 0.0)}",
         "",
-        "## 7건 결과",
+        f"## 항목 결과 ({len(report['items'])}건)",
         "",
     ]
     for item in report["items"]:

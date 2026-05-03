@@ -85,3 +85,46 @@ def test_temp_id_missing_in_reviewer_falls_back_safely(bot_module, cfg):
     )
     assert len(report["items"]) == 7
     assert report["summary"]["blocked"] == 7
+
+
+# ---------- 4차 검수 회귀 ----------
+
+def test_report_header_uses_actual_item_count_not_hardcoded_seven(bot_module, cfg):
+    """draft 같이 1건짜리 배치도 '7건'으로 잘못 표기되면 안 된다 (Fix N)."""
+    bot = bot_module
+    basis = bot.now_in_tz("Asia/Seoul")
+    draft = bot.make_dry_run_draft(cfg, basis)
+    reviews = {r: bot.make_dry_run_review(r, draft) for r in bot.REVIEWERS}
+    report = bot.build_report_from_data(
+        run_id="weekly-test-draft-md",
+        spec=draft,
+        reviews=reviews,
+        repair_attempted=False,
+        config=cfg,
+    )
+    md = bot.render_report_markdown(report, reviews)
+    assert "## 7건 결과" not in md
+    assert "## 항목 결과 (1건)" in md
+
+
+def test_draft_item_markdown_has_no_indent_leakage(bot_module, cfg):
+    """render_draft_item_markdown이 4-space 들여쓰기를 내보내면 안 된다 (Fix P)."""
+    bot = bot_module
+    basis = bot.now_in_tz("Asia/Seoul")
+    draft = bot.make_dry_run_draft(cfg, basis)
+    item = draft["items"][0]
+    md = bot.render_draft_item_markdown(item)
+    leaking = [ln for ln in md.splitlines() if ln.startswith("    ")]
+    assert not leaking, f"draft markdown leaks indent: {leaking[:3]!r}"
+
+
+def test_render_item_markdown_dispatches_by_shape(bot_module, cfg):
+    """spec/draft item을 같은 함수가 모양으로 분기해 렌더한다."""
+    bot = bot_module
+    basis = bot.now_in_tz("Asia/Seoul")
+    spec_item = bot.make_dry_run_spec(cfg, basis)["items"][0]
+    draft_item = bot.make_dry_run_draft(cfg, basis)["items"][0]
+    spec_md = bot.render_item_markdown(spec_item)
+    draft_md = bot.render_item_markdown(draft_item)
+    assert "분야:" in spec_md and "축값:" not in spec_md
+    assert "축값:" in draft_md and "분야:" not in draft_md
