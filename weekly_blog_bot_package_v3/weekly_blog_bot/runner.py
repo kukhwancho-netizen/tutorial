@@ -18,7 +18,8 @@ def run(config_path: pathlib.Path, *, dry_run: bool = False,
         order: Optional[OrderSpec] = None) -> Dict[str, Any]:
     pass_ = pass_for(order) if order is not None else SPEC_PASS
     ctx = stages.stage_prepare(
-        config_path, dry_run=dry_run, no_calendar=no_calendar, pass_=pass_
+        config_path, dry_run=dry_run, no_calendar=no_calendar,
+        pass_=pass_, order=order,
     )
 
     if ctx.dry_run:

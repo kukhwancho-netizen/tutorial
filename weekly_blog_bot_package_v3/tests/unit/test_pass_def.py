@@ -161,3 +161,70 @@ def test_spec_pass_schema_and_prompts_exist(root_path):
     assert (root_path / "prompts" / pass_.repair_prompt_file).is_file()
     for fname in pass_.reviewer_prompt_files.values():
         assert (root_path / "prompts" / fname).is_file()
+
+
+# ---------- 5차 검수: OrderSpec → payload / parent_spec 로드 ----------
+
+def _prepared_ctx(tmp_path, root_path, cfg, *, pass_, order, dry_run=True):
+    import yaml
+    from weekly_blog_bot import stages
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    for name in ("schemas", "prompts"):
+        target = tmp_path / name
+        if not target.exists():
+            target.symlink_to(root_path / name, target_is_directory=True)
+    cfg["outputs"]["directory"] = "outputs"
+    cfg["calendar"]["enabled"] = False
+    cfg["outputs"]["create_calendar_event"] = False
+    cfg["notifications"]["enabled"] = False
+    cfg_path = tmp_path / "config" / "weekly_blog_bot.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+    return stages.stage_prepare(
+        cfg_path, dry_run=dry_run, no_calendar=True, pass_=pass_, order=order,
+    )
+
+
+def test_make_order_payload_carries_spec_order_content(tmp_path, root_path, cfg):
+    """parse_order의 channel/distribution/total이 generator payload까지 흘러간다."""
+    from weekly_blog_bot import stages
+    order = parse_order("블 (민+가+행) 7 ㄱㄱ")
+    ctx = _prepared_ctx(tmp_path, root_path, cfg, pass_=SPEC_PASS, order=order)
+    payload = stages._make_order_payload(ctx)
+    assert payload["order"]["mode"] == "spec"
+    assert payload["order"]["channel"] == "블로그"
+    assert payload["order"]["distribution"] == ["민사", "가사", "행정"]
+    assert payload["order"]["total"] == 7
+
+
+def test_make_order_payload_carries_draft_order_content(tmp_path, root_path, cfg):
+    from weekly_blog_bot import stages
+    order = parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
+    # draft + dry_run=True → parent_spec_item 로드는 건너뛴다 (live만 시도)
+    ctx = _prepared_ctx(tmp_path, root_path, cfg, pass_=DRAFT_PASS, order=order)
+    payload = stages._make_order_payload(ctx)
+    assert payload["order"]["mode"] == "draft"
+    assert payload["order"]["parent_spec_id"] == "콘텐츠 3"
+    assert payload["order"]["axis"] == "길이"
+    assert payload["order"]["variants"] == ["풀", "요약", "핵심"]
+
+
+def test_draft_live_without_parent_spec_aborts_cleanly(tmp_path, root_path, cfg):
+    """draft 모드 live 진입에서 부모 spec output이 없으면 PipelineAbort."""
+    from weekly_blog_bot.domain import PipelineAbort
+    order = parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
+    with pytest.raises(PipelineAbort) as excinfo:
+        _prepared_ctx(tmp_path, root_path, cfg, pass_=DRAFT_PASS, order=order, dry_run=False)
+    assert "spec output" in str(excinfo.value)
+
+
+def test_draft_live_with_parent_spec_loads_item(tmp_path, root_path, cfg, bot_module):
+    """spec 출력이 outputs/에 있으면 draft live가 그 item을 ctx.parent_spec_item으로 가져온다."""
+    bot = bot_module
+    # 먼저 dry-run으로 spec 출력을 만든다.
+    ctx = _prepared_ctx(tmp_path, root_path, cfg, pass_=SPEC_PASS, order=None)
+    bot.run(ctx.config_path, dry_run=True, no_calendar=True)
+    # 이제 draft live 진입.
+    order = parse_order("draft 콘텐츠 5 후보 A B C")
+    drafted = _prepared_ctx(tmp_path, root_path, cfg, pass_=DRAFT_PASS, order=order, dry_run=False)
+    assert drafted.parent_spec_item is not None
+    assert drafted.parent_spec_item["temp_id"] == "콘텐츠 5"

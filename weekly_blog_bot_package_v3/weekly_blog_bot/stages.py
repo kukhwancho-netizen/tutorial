@@ -18,7 +18,7 @@ from .adapters.openai_client import (
     validate_json,
 )
 from .budget import enforce_context_budget
-from .domain import StageContext, CalendarAuthError, MalformedModelJSONError
+from .domain import StageContext, CalendarAuthError, MalformedModelJSONError, PipelineAbort
 from .dry_run import (
     make_dry_run_draft,
     make_dry_run_review,
@@ -45,11 +45,14 @@ from .settings import (
 # ---------- 단계 1: 준비 ----------
 
 def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
-                  pass_: BatchPass = SPEC_PASS) -> StageContext:
-    """env 로드 + config 로드 + 경로/스키마 준비.
+                  pass_: BatchPass = SPEC_PASS,
+                  order: Optional[Any] = None) -> StageContext:
+    """env 로드 + config 로드 + 경로/스키마 준비 + (draft) 부모 spec 로드.
 
-    pass_별 batch 스키마(spec_batch / draft_batch)를 로드한다. ctx.spec_schema는
-    필드 이름 호환을 위해 유지되며, 안에 들어가는 스키마는 pass_에 따라 다르다.
+    pass_별 batch 스키마(spec_batch / draft_batch)를 로드한다. order가 주어지면
+    StageContext에 보존돼 generator payload에 흘러간다. draft 모드에서는
+    outputs/의 가장 최근 spec_weekly_report.json에서 parent_spec_id에 해당하는
+    item을 찾아 ctx.parent_spec_item에 둔다 — dry-run/live 모두 적용된다.
     """
     load_environment()
     config = load_yaml(config_path)
@@ -74,7 +77,41 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
     ctx.reviewer_schema = load_json(paths.schemas / "reviewer_result.schema.json")
     ctx.report_schema = load_json(paths.schemas / "final_report.schema.json")
     ctx.pass_label = pass_.output_label
+    ctx.order = order
+    if pass_.name == "draft" and order is not None and not dry_run:
+        ctx.parent_spec_item = _load_parent_spec_item(paths.outputs, order.parent_spec_id)
     return ctx
+
+
+def _load_parent_spec_item(outputs_dir, parent_spec_id: Optional[str]) -> Dict[str, Any]:
+    """outputs/의 가장 최근 spec_weekly_report.json에서 parent_spec_id 항목을 꺼낸다.
+
+    실패 시 PipelineAbort(category='aborted')를 던져 cli abort 핸들러가 단일
+    채널로 알린다. 명시적 실패 신호 — 사람이 spec 검토 후 명령을 다시 내려야 한다.
+    """
+    if not parent_spec_id:
+        raise PipelineAbort(
+            "draft order missing parent_spec_id",
+            category="aborted",
+        )
+    candidates = sorted(outputs_dir.glob("*_spec_weekly_report.json"), reverse=True)
+    if not candidates:
+        raise PipelineAbort(
+            f"draft mode requires a prior spec output but none found in {outputs_dir}",
+            category="aborted",
+            details={"parent_spec_id": parent_spec_id, "outputs_dir": str(outputs_dir)},
+        )
+    latest = candidates[0]
+    data = load_json(latest)
+    spec_batch = data.get("spec_batch") or {}
+    for item in spec_batch.get("items", []):
+        if item.get("temp_id") == parent_spec_id:
+            return item
+    raise PipelineAbort(
+        f"parent_spec_id {parent_spec_id!r} not found in {latest.name}",
+        category="aborted",
+        details={"parent_spec_id": parent_spec_id, "source_file": str(latest)},
+    )
 
 
 # ---------- 단계 2: dry-run vs live ----------
@@ -112,8 +149,26 @@ def stage_fetch_calendar(ctx: StageContext) -> StageContext:
 # ---------- 단계 3: 생성 ----------
 
 def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
-    return {
-        "order": ctx.config["order"]["trigger_text"],
+    """generator/repair 단계 모델 입력. OrderSpec이 있으면 그 내용을 함께 전달한다.
+
+    spec 모드: order.channel/distribution/total
+    draft 모드: order.parent_spec_id/axis/variants + ctx.parent_spec_item
+    """
+    order = ctx.order
+    base_order = {"trigger_text": ctx.config["order"]["trigger_text"]}
+    if order is not None:
+        base_order["mode"] = order.mode
+        base_order["raw"] = order.raw
+        if order.mode == "spec":
+            base_order["channel"] = order.channel
+            base_order["distribution"] = list(order.distribution)
+            base_order["total"] = order.total
+        elif order.mode == "draft":
+            base_order["parent_spec_id"] = order.parent_spec_id
+            base_order["axis"] = order.axis
+            base_order["variants"] = list(order.variants)
+    payload: Dict[str, Any] = {
+        "order": base_order,
         "basis_date": ctx.basis.strftime("%Y-%m-%d"),
         "calendar_context": ctx.calendar_context,
         "completed_topic_snapshot": (ctx.calendar_context or {}).get("events", {}).get("completed_topic_db", []),
@@ -121,6 +176,9 @@ def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
         "case_law_policy": ctx.config.get("knowledge", {}).get("case_law", {}),
         "config": model_facing_config(ctx.config),
     }
+    if ctx.parent_spec_item is not None:
+        payload["parent_spec_item"] = ctx.parent_spec_item
+    return payload
 
 
 def stage_generate(ctx: StageContext, *, client: Any,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 import textwrap
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 from .decision import (
     FINAL_BLOCKED,
