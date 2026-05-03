@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import sys
-import textwrap
 from typing import Any, Dict, Iterable, List, Optional
 
 from .decision import (
@@ -98,7 +97,7 @@ def _coverage_check_or_fix(
 def build_report_from_data(
     *,
     run_id: str,
-    spec: Dict[str, Any],
+    batch: Dict[str, Any],
     reviews: Dict[str, Dict[str, Any]],
     repair_attempted: bool = False,
     usage_by_model: Optional[Dict[str, Dict[str, int]]] = None,
@@ -106,6 +105,7 @@ def build_report_from_data(
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     config = config or {}
+    spec = batch  # 검수 있는 batch(현재는 draft/edit만 사용).
 
     # 결함 방지: 검수 결과 ID 중복·누락 시 fallback로 대체.
     reviews = _coverage_check_or_fix(reviews, spec)
@@ -156,7 +156,7 @@ def build_report_from_data(
             "final_status": final_status,
             "risk": item["risk"]["level"],
             "review_summary": review_summary,
-            "spec_markdown": render_item_markdown(item),
+            "spec_markdown": render_draft_item_markdown(item),
         })
 
     usage_by_model = usage_by_model or {}
@@ -192,7 +192,7 @@ def build_report_from_data(
 def build_sketch_report_from_data(
     *,
     run_id: str,
-    spec: Dict[str, Any],
+    batch: Dict[str, Any],
     usage_by_model: Optional[Dict[str, Dict[str, int]]] = None,
     dry_run: bool = False,
     config: Dict[str, Any],
@@ -206,7 +206,7 @@ def build_sketch_report_from_data(
             "risk_hint": it["risk_hint"],
             **({"rationale": it["rationale"]} if "rationale" in it else {}),
         }
-        for it in spec.get("items", [])
+        for it in batch.get("items", [])
     ]
     high_risk_hint = sum(1 for it in items_out if it["risk_hint"] == "high")
 
@@ -228,8 +228,8 @@ def build_sketch_report_from_data(
     return {
         "run_id": run_id,
         "run_status": "dry_run" if dry_run else "completed",
-        "basis_date": spec["basis_date"],
-        "order": spec["order"],
+        "basis_date": batch["basis_date"],
+        "order": batch["order"],
         "summary": {"sketches": len(items_out), "high_risk_hint": high_risk_hint},
         "usage": {
             "by_model": usage_by_model,
@@ -287,11 +287,7 @@ def next_actions_for_summary(publish: int, repair: int, blocked: int, skipped: i
     return actions or ["처리할 후속 액션 없음"]
 
 
-# ---------- 마크다운 렌더 (검수 있는 PASS, 현재는 draft) ----------
-
-def _is_draft_item(item: Dict[str, Any]) -> bool:
-    return "axis_value" in item
-
+# ---------- 마크다운 렌더 (검수 있는 PASS — 현재 draft/edit 모두 같은 모양) ----------
 
 def _item_topic(item: Dict[str, Any]) -> str:
     return item.get("topic") or item.get("title") or item.get("temp_id", "")
@@ -302,14 +298,6 @@ def _item_domain(item: Dict[str, Any], spec: Dict[str, Any]) -> str:
         return item["domain"]
     axis = spec.get("axis")
     return f"draft·{axis}" if axis else "draft"
-
-
-def render_item_markdown(item: Dict[str, Any]) -> str:
-    """검수 PASS의 item 1건. draft 변주를 렌더."""
-    if _is_draft_item(item):
-        return render_draft_item_markdown(item)
-    # 이 경로는 현재 사용되지 않음 (spec은 sketch 경로). 호환을 위해 남김.
-    return render_spec_item_markdown(item)
 
 
 def render_draft_item_markdown(item: Dict[str, Any]) -> str:
@@ -338,36 +326,6 @@ def render_draft_item_markdown(item: Dict[str, Any]) -> str:
         "근거:",
         claims,
     ])
-
-
-def render_spec_item_markdown(item: Dict[str, Any]) -> str:
-    must = "\n".join(f"- {x}" for x in item["must_include"])
-    outline = "\n".join(f"{idx+1}. {x}" for idx, x in enumerate(item["outline"]))
-    tags = []
-    for key in ["representative", "secondary", "practical", "local"]:
-        tags.extend(item["tag_strategy"].get(key, []))
-    return textwrap.dedent(f"""
-    ### {item['temp_id']} — {item['topic']}
-
-    - 채널: {item['channel']}
-    - 분야: {item['domain']}
-    - 위험도: {item['risk']['level']} / 사람 확인: {item['risk']['human_gate_required']}
-    - 독자 상황: {item['reader_situation']}
-    - 핵심결론: {item['core_conclusion']}
-    - 차별화 포인트: {item['differentiation']}
-    - 실패 포인트: {item['failure_point']}
-
-    반드시 포함할 내용:
-    {must}
-
-    구성안:
-    {outline}
-
-    태그 전략: {' '.join(tags)}
-    제외 태그: {', '.join(item['tag_strategy'].get('excluded', []))}
-    로컬반영포인트: {item['local_point']}
-    연결 권장 기존 글: {item['related_existing_content']}
-    """).strip()
 
 
 def render_report_markdown(report: Dict[str, Any], reviews: Optional[Dict[str, Any]] = None) -> str:

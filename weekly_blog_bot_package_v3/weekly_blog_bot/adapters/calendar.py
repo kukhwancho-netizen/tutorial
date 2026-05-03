@@ -8,7 +8,6 @@ import datetime as dt
 import json
 import os
 import pathlib
-import sys
 from typing import Any, Dict
 
 from ..domain import CalendarAuthError, PipelineAbort

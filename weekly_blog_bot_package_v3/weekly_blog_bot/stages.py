@@ -1,15 +1,15 @@
 """파이프라인 단계 함수.
 
 각 단계는 ``StageContext``를 받아 같은 컨텍스트를 갱신해 돌려준다.
-이 모듈은 흐름의 모양을 보여주는 역할이고, 실제 외부 호출은 adapters에 위임한다.
+이 모듈은 흐름의 모양만 알고, PASS-별 의미는 BatchPass의 콜백/플래그에서 가져온다.
+실제 외부 호출은 adapters에 위임한다.
 """
 from __future__ import annotations
 
 import json
-import pathlib
 import sys
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .adapters import calendar as calendar_adapter
 from .adapters import notifications
@@ -20,19 +20,8 @@ from .adapters.openai_client import (
 )
 from .budget import enforce_context_budget
 from .domain import StageContext, CalendarAuthError, MalformedModelJSONError
-from .dry_run import (
-    make_dry_run_draft,
-    make_dry_run_review,
-    make_dry_run_spec,
-    make_fallback_reviewer_result,
-)
+from .dry_run import make_dry_run_review, make_fallback_reviewer_result
 from .pass_def import SPEC_PASS, BatchPass
-from .reporting import (
-    build_report_from_data,
-    build_sketch_report_from_data,
-    render_report_markdown,
-    render_sketch_report_markdown,
-)
 from .settings import (
     REVIEWERS,
     load_environment,
@@ -52,12 +41,8 @@ from .settings import (
 
 def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
                   pass_: BatchPass = SPEC_PASS,
-                  order: Optional[Any] = None) -> StageContext:
-    """env 로드 + config 로드 + 경로/스키마 준비.
-
-    pass_의 schema_file을 ctx.spec_schema에 로드한다 (본 라운드는 spec_batch만
-    가능). order가 주어지면 StageContext에 보존돼 generator payload에 흘러간다.
-    """
+                  order: Any = None) -> StageContext:
+    """env 로드 + config + 경로 + 스키마 + (PASS별) prepare_hook 호출."""
     load_environment()
     config = load_yaml(config_path)
     if no_calendar:
@@ -77,113 +62,28 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
         dry_run=dry_run,
         no_calendar=no_calendar,
     )
-    ctx.spec_schema = load_json(paths.schemas / pass_.schema_file)
+    ctx.batch_schema = load_json(paths.schemas / pass_.schema_file)
     ctx.report_schema = load_json(paths.schemas / pass_.report_schema_file)
     if pass_.has_review:
         ctx.reviewer_schema = load_json(paths.schemas / "reviewer_result.schema.json")
-    else:
-        ctx.reviewer_schema = None
     ctx.pass_label = pass_.output_label
     ctx.order = order
-    if pass_.name == "draft" and order is not None and not dry_run:
-        ctx.parent_spec_item = _load_parent_spec_item(paths.outputs, order.parent_spec_id)
-    if pass_.name == "edit" and order is not None and not dry_run:
-        ctx.spec = _load_draft_for_edit(paths.outputs, order.target_temp_id, order.source_file)
-        validate_json(ctx.spec_schema, ctx.spec, pass_.schema_name)
+    if pass_.prepare_hook is not None:
+        pass_.prepare_hook(ctx)
+        # edit hook은 ctx.batch를 채운다 — live 진입에서 즉시 스키마 검증.
+        if ctx.batch is not None:
+            validate_json(ctx.batch_schema, ctx.batch, pass_.schema_name)
     return ctx
-
-
-def _load_draft_for_edit(outputs_dir, target_temp_id: Optional[str],
-                         source_file: Optional[str]) -> Dict[str, Any]:
-    """edit 명령용. target_temp_id를 포함한 draft batch를 찾아 spec(=batch)으로 둔다.
-
-    source_file이 지정되면 그 파일 우선. 없으면 outputs/의 가장 최근
-    *_draft_weekly_report.json 또는 *_edit_weekly_report.json 중에서 매칭되는
-    것을 찾는다.
-    """
-    from .domain import PipelineAbort
-    if not target_temp_id:
-        raise PipelineAbort("edit order missing target_temp_id", category="aborted")
-
-    if source_file:
-        path = pathlib.Path(source_file)
-        if not path.exists():
-            raise PipelineAbort(
-                f"edit source file not found: {source_file}",
-                category="aborted",
-                details={"target_temp_id": target_temp_id, "source_file": source_file},
-            )
-        candidates = [path]
-    else:
-        candidates = sorted(
-            list(outputs_dir.glob("*_draft_weekly_report.json"))
-            + list(outputs_dir.glob("*_edit_weekly_report.json")),
-            reverse=True,
-        )
-        if not candidates:
-            raise PipelineAbort(
-                f"edit needs a prior draft/edit output; none found in {outputs_dir}",
-                category="aborted",
-                details={"target_temp_id": target_temp_id, "outputs_dir": str(outputs_dir)},
-            )
-
-    for path in candidates:
-        data = load_json(path)
-        batch = data.get("spec_batch") or {}
-        for item in batch.get("items", []):
-            if item.get("temp_id") == target_temp_id:
-                return batch
-    raise PipelineAbort(
-        f"target_temp_id {target_temp_id!r} not found in any candidate output",
-        category="aborted",
-        details={"target_temp_id": target_temp_id,
-                 "scanned": [str(c) for c in candidates[:5]]},
-    )
-
-
-def _load_parent_spec_item(outputs_dir, parent_spec_id: Optional[str]) -> Dict[str, Any]:
-    """outputs/의 가장 최근 spec_weekly_report.json에서 parent_spec_id 항목을 꺼낸다.
-
-    실패 시 PipelineAbort('aborted')로 단일 채널 알림. 사용자가 spec 검토 후
-    명령을 다시 내려야 함을 명시한다.
-    """
-    from .domain import PipelineAbort
-    if not parent_spec_id:
-        raise PipelineAbort("draft order missing parent_spec_id", category="aborted")
-    candidates = sorted(outputs_dir.glob("*_spec_weekly_report.json"), reverse=True)
-    if not candidates:
-        raise PipelineAbort(
-            f"draft mode requires a prior spec output; none found in {outputs_dir}",
-            category="aborted",
-            details={"parent_spec_id": parent_spec_id, "outputs_dir": str(outputs_dir)},
-        )
-    latest = candidates[0]
-    data = load_json(latest)
-    spec_batch = data.get("spec_batch") or {}
-    for item in spec_batch.get("items", []):
-        if item.get("temp_id") == parent_spec_id:
-            return item
-    raise PipelineAbort(
-        f"parent_spec_id {parent_spec_id!r} not found in {latest.name}",
-        category="aborted",
-        details={"parent_spec_id": parent_spec_id, "source_file": str(latest)},
-    )
 
 
 # ---------- 단계 2: dry-run vs live ----------
 
 def stage_dry_run(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
-    """dry-run 분기: pass_별 샘플 batch + (검수 PASS만) 더미 reviews.
-
-    edit는 draft 샘플을 재사용한다 — 의미상 사용자 편집된 draft를 시뮬레이션.
-    """
-    if pass_.name in ("draft", "edit"):
-        ctx.spec = make_dry_run_draft(ctx.config, ctx.basis)
-    else:
-        ctx.spec = make_dry_run_spec(ctx.config, ctx.basis)
-    validate_json(ctx.spec_schema, ctx.spec, pass_.schema_name)
-    if ctx.reviewer_schema is not None:
-        ctx.reviews = {r: make_dry_run_review(r, ctx.spec) for r in REVIEWERS}
+    """dry-run 분기: PASS의 dry_run_factory로 샘플 생성. 검수 PASS면 더미 reviews."""
+    ctx.batch = pass_.dry_run_factory(ctx.config, ctx.basis)
+    validate_json(ctx.batch_schema, ctx.batch, pass_.schema_name)
+    if pass_.has_review:
+        ctx.reviews = {r: make_dry_run_review(r, ctx.batch) for r in REVIEWERS}
         for r, data in ctx.reviews.items():
             validate_json(ctx.reviewer_schema, data, f"ReviewerResult-{r}")
     else:
@@ -192,7 +92,6 @@ def stage_dry_run(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageCo
 
 
 def stage_validate_models_if_required(ctx: StageContext) -> StageContext:
-    """live 진입 전 자동 모델 검증."""
     mv_cfg = ctx.config.get("model_validation", {})
     if mv_cfg.get("required_before_live_run", True):
         validate_configured_models(ctx.config_path, ping=bool(mv_cfg.get("ping", True)))
@@ -207,21 +106,14 @@ def stage_fetch_calendar(ctx: StageContext) -> StageContext:
 # ---------- 단계 3: 생성 ----------
 
 def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
-    """generator/repair 단계 모델 입력. OrderSpec과 parent_spec_item이 함께 전달된다."""
-    order = ctx.order
-    base_order: Dict[str, Any] = {"trigger_text": ctx.config["order"]["trigger_text"]}
-    if order is not None:
-        base_order.update({"mode": order.mode, "raw": order.raw})
-        if order.mode == "spec":
-            base_order["channel"] = order.channel
-            base_order["distribution"] = list(order.distribution)
-            base_order["total"] = order.total
-        elif order.mode == "draft":
-            base_order["parent_spec_id"] = order.parent_spec_id
-            base_order["axis"] = order.axis
-            base_order["variants"] = list(order.variants)
+    """generator/repair 단계 모델 입력. OrderSpec.to_payload_dict로 모드 분기 캡슐화."""
+    default_trigger = ctx.config["order"]["trigger_text"]
+    if ctx.order is not None:
+        order_field = ctx.order.to_payload_dict(default_trigger=default_trigger)
+    else:
+        order_field = {"trigger_text": default_trigger}
     payload: Dict[str, Any] = {
-        "order": base_order,
+        "order": order_field,
         "basis_date": ctx.basis.strftime("%Y-%m-%d"),
         "calendar_context": ctx.calendar_context,
         "completed_topic_snapshot": (ctx.calendar_context or {}).get("events", {}).get("completed_topic_db", []),
@@ -236,7 +128,6 @@ def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
 
 def stage_generate(ctx: StageContext, *, client: Any,
                    pass_: BatchPass = SPEC_PASS) -> StageContext:
-    """배치 생성 단계 — pass_별 schema/prompt를 사용한다."""
     payload = _make_order_payload(ctx)
     enforce_context_budget(ctx.config, payload, f"generator-{pass_.name}")
     openai_cfg = ctx.config.get("openai", {})
@@ -248,39 +139,30 @@ def stage_generate(ctx: StageContext, *, client: Any,
         model=model_ids["generator"],
         instructions=load_text(ctx.paths.prompts / pass_.generator_prompt_file),
         payload=payload,
-        schema=ctx.spec_schema,
+        schema=ctx.batch_schema,
         schema_name=pass_.schema_name,
         max_output_tokens=max_tokens,
         use_web_search=use_web,
     )
-    ctx.spec = result.data
+    ctx.batch = result.data
     ctx.usage.add(model_ids["generator"], result.usage)
     return ctx
 
 
-# 옛 이름 호환용 alias.
-def stage_generate_spec(ctx: StageContext, *, client: Any) -> StageContext:
-    return stage_generate(ctx, client=client, pass_=SPEC_PASS)
-
-
 # ---------- 단계 4: 검수 ----------
 
-def _call_reviewer(
-    *,
-    client: Any,
-    ctx: StageContext,
-    reviewer: str,
-    stage_label: str,
-    pass_: BatchPass,
-) -> Dict[str, Any]:
+def _call_reviewer(*, client: Any, ctx: StageContext, reviewer: str,
+                   stage_label: str, pass_: BatchPass) -> Dict[str, Any]:
     openai_cfg = ctx.config.get("openai", {})
     max_tokens = int(openai_cfg.get("max_output_tokens", 12000))
     use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     reviewer_payload = {
-        "spec_batch": ctx.spec,
+        "spec_batch": ctx.batch,
         "config": model_facing_config(ctx.config),
         "calendar_context": ctx.calendar_context,
     }
+    if ctx.parent_spec_item is not None:
+        reviewer_payload["parent_spec_item"] = ctx.parent_spec_item
     enforce_context_budget(ctx.config, reviewer_payload, stage_label)
     reviewer_model = resolve_reviewer_model(ctx.config, reviewer)
     try:
@@ -298,7 +180,7 @@ def _call_reviewer(
         return reviewer_result.data
     except MalformedModelJSONError as exc:
         return make_fallback_reviewer_result(
-            reviewer, ctx.spec, f"{stage_label} {reviewer} malformed JSON: {exc}"
+            reviewer, ctx.batch, f"{stage_label} {reviewer} malformed JSON: {exc}"
         )
 
 
@@ -329,10 +211,12 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any,
     use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     model_ids = model_ids_from_config(ctx.config)
     repair_payload = {
-        "spec_batch": ctx.spec,
+        "spec_batch": ctx.batch,
         "reviews": ctx.reviews,
         "config": model_facing_config(ctx.config),
     }
+    if ctx.parent_spec_item is not None:
+        repair_payload["parent_spec_item"] = ctx.parent_spec_item
     enforce_context_budget(ctx.config, repair_payload, f"repair-{pass_.name}")
     try:
         repair_result = call_openai_json(
@@ -340,21 +224,19 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any,
             model=model_ids["repair"],
             instructions=load_text(ctx.paths.prompts / pass_.repair_prompt_file),
             payload=repair_payload,
-            schema=ctx.spec_schema,
+            schema=ctx.batch_schema,
             schema_name=pass_.schema_name,
             max_output_tokens=max_tokens,
             use_web_search=use_web,
         )
-        ctx.spec = repair_result.data
+        ctx.batch = repair_result.data
         ctx.usage.add(model_ids["repair"], repair_result.usage)
     except MalformedModelJSONError as exc:
-        # 보정 결과 자체가 깨졌으면 자동 보류로 떨어진다.
         ctx.reviews["R2"] = make_fallback_reviewer_result(
-            "R2", ctx.spec, f"repair malformed JSON: {exc}"
+            "R2", ctx.batch, f"repair malformed JSON: {exc}"
         )
         return ctx
 
-    # 보정 성공: 재검수.
     repaired_reviews: Dict[str, Dict[str, Any]] = {}
     for reviewer in list(ctx.reviews.keys()):
         repaired_reviews[reviewer] = _call_reviewer(
@@ -367,30 +249,19 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any,
 
 # ---------- 단계 6: 리포트 ----------
 
-def stage_build_report(ctx: StageContext) -> StageContext:
-    """spec sketch는 검수 없는 sketch 리포트, 검수가 있는 PASS는 final 리포트."""
-    if not ctx.reviews:
-        ctx.report = build_sketch_report_from_data(
-            run_id=ctx.run_id,
-            spec=ctx.spec,
-            usage_by_model=ctx.usage.by_model,
-            dry_run=ctx.dry_run,
-            config=ctx.config,
-        )
-        validate_json(ctx.report_schema, ctx.report, "WeeklySketchReport")
-        ctx.markdown = render_sketch_report_markdown(ctx.report)
-    else:
-        ctx.report = build_report_from_data(
-            run_id=ctx.run_id,
-            spec=ctx.spec,
-            reviews=ctx.reviews,
-            repair_attempted=ctx.repair_attempted,
-            usage_by_model=ctx.usage.by_model,
-            dry_run=ctx.dry_run,
-            config=ctx.config,
-        )
-        validate_json(ctx.report_schema, ctx.report, "WeeklyFinalReport")
-        ctx.markdown = render_report_markdown(ctx.report, ctx.reviews)
+def stage_build_report(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
+    """PASS의 report_builder + markdown_renderer를 호출. 검수 유무는 PASS가 안다."""
+    ctx.report = pass_.report_builder(
+        run_id=ctx.run_id,
+        batch=ctx.batch,
+        reviews=ctx.reviews or {},
+        repair_attempted=ctx.repair_attempted,
+        usage_by_model=ctx.usage.by_model,
+        dry_run=ctx.dry_run,
+        config=ctx.config,
+    )
+    validate_json(ctx.report_schema, ctx.report, pass_.schema_name + "Report")
+    ctx.markdown = pass_.markdown_renderer(ctx.report, ctx.reviews or {})
     return ctx
 
 
@@ -402,7 +273,10 @@ def stage_persist(ctx: StageContext) -> StageContext:
     ctx.json_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}{label}_weekly_report.json"
     ctx.md_path = ctx.paths.outputs / f"{date_part}_{ctx.run_id}{label}_weekly_report.md"
     if ctx.config.get("outputs", {}).get("save_json", True):
-        write_json(ctx.json_path, {"report": ctx.report, "spec_batch": ctx.spec, "reviews": ctx.reviews})
+        write_json(
+            ctx.json_path,
+            {"report": ctx.report, "spec_batch": ctx.batch, "reviews": ctx.reviews or {}},
+        )
     if ctx.config.get("outputs", {}).get("save_markdown", True):
         ctx.md_path.write_text(ctx.markdown, encoding="utf-8")
     return ctx
@@ -418,7 +292,6 @@ def stage_write_calendar(ctx: StageContext) -> StageContext:
             ctx.config, ctx.basis, ctx.markdown
         )
     except CalendarAuthError:
-        # 알림은 main()의 abort 핸들러가 단일 채널로 보낸다 (이중 통보 방지).
         raise
     except Exception as exc:
         print(f"[calendar-write-skipped] {exc}", file=sys.stderr)
@@ -427,26 +300,16 @@ def stage_write_calendar(ctx: StageContext) -> StageContext:
 
 # ---------- 단계 9: 알림 ----------
 
-def stage_notify(ctx: StageContext) -> StageContext:
+def stage_notify(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
     events = notifications.notification_events_from_report(ctx.report)
     if not events:
         return ctx
     summary = ctx.report.get("summary", {})
     title = f"주간 블로그 봇 알림: {', '.join(events)}"
-    if "sketches" in summary:
-        body_summary = (
-            f"sketches={summary.get('sketches')} / "
-            f"high_risk_hint={summary.get('high_risk_hint')}"
-        )
-    else:
-        body_summary = (
-            f"통과={summary.get('publish_candidates')} / 수정={summary.get('needs_repair')} "
-            f"/ 보류={summary.get('blocked')} / 사람확인={summary.get('human_gate')}"
-        )
     body = (
         f"run_id={ctx.report.get('run_id')}\n"
         f"basis_date={ctx.report.get('basis_date')}\n"
-        f"{body_summary}\n"
+        f"{pass_.summary_formatter(summary)}\n"
         f"report={ctx.md_path}"
     )
     notifications.send_notification(ctx.config, title=title, body=body, events=events)
@@ -456,12 +319,7 @@ def stage_notify(ctx: StageContext) -> StageContext:
 # ---------- abort 리포트 ----------
 
 def write_abort_report(config_path, exc: Exception, *,
-                       pass_label: Optional[str] = None) -> Dict[str, Any]:
-    """abort 시 최소한의 결과 파일을 남기고 알림을 보낸다.
-
-    pass_label이 주어지면 abort 파일명에도 spec/draft 라벨이 박혀, 같은 시각에
-    여러 PASS가 abort했을 때 구분 가능하다.
-    """
+                       pass_label: "Any" = None) -> Dict[str, Any]:
     config = load_yaml(config_path) if config_path.exists() else {}
     paths = make_paths(config_path, config)
     paths.outputs.mkdir(parents=True, exist_ok=True)
@@ -475,10 +333,12 @@ def write_abort_report(config_path, exc: Exception, *,
         "run_status": "aborted",
         "basis_date": basis.strftime("%Y-%m-%d"),
         "order": config.get("order", {}).get("trigger_text", "unknown"),
-        "summary": {"publish_candidates": 0, "needs_repair": 0, "blocked": 0, "human_gate": 0, "dry_run_skipped": 0},
+        "summary": {"publish_candidates": 0, "needs_repair": 0, "blocked": 0,
+                    "human_gate": 0, "dry_run_skipped": 0},
         "usage": {
             "by_model": {},
-            "total": {"input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "web_search_calls": 0},
+            "total": {"input_tokens": 0, "cached_input_tokens": 0,
+                      "output_tokens": 0, "web_search_calls": 0},
             "estimated_cost_usd": 0.0,
             "cost_warnings": [],
         },
@@ -486,12 +346,10 @@ def write_abort_report(config_path, exc: Exception, *,
         "items": [],
         "next_actions": ["aborted 원인을 확인하고, 필요 시 OAuth·모델 ID·컨텍스트 예산을 수정한다."],
     }
-    # final_report.schema.json에 abort 모양도 통과하도록 error를 옵셔널 필드로 둔다.
-    # 검증이 가능하면 시도하되, 스키마 로드 실패는 abort 경로를 막지 않는다.
     try:
         schema = load_json(paths.schemas / "final_report.schema.json")
         validate_json(schema, report, "WeeklyFinalReport(aborted)")
-    except Exception as schema_exc:  # noqa: BLE001 — abort 경로는 추가 abort를 던지지 않는다
+    except Exception as schema_exc:  # noqa: BLE001
         report["next_actions"].append(
             f"abort report schema 검증 실패(무시): {schema_exc}"
         )

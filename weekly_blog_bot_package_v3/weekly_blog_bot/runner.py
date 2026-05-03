@@ -1,8 +1,8 @@
 """파이프라인 오케스트레이터.
 
-PASS의 capability(has_review / has_calendar_write)를 보고 단계를 건너뛴다.
-spec sketch는 generator → report → persist 만 통과. draft 등 검수 PASS는
-review/repair/calendar_write까지 통과.
+PASS의 capability(has_generation / has_review / has_calendar_write /
+fetches_calendar)를 보고 단계를 켜고 끈다. 비즈니스 로직은 stages, PASS-별
+의미는 BatchPass의 콜백에 산다.
 """
 from __future__ import annotations
 
@@ -26,24 +26,24 @@ def run(config_path: pathlib.Path, *, dry_run: bool = False,
     if ctx.dry_run:
         ctx = stages.stage_dry_run(ctx, pass_=pass_)
     else:
-        client = None
-        if pass_.has_review or pass_.has_generation:
+        client: Any = None
+        if pass_.has_generation or pass_.has_review:
             ctx = stages.stage_validate_models_if_required(ctx)
             client = make_client()
-        if pass_.name in ("spec", "draft"):
+        if pass_.fetches_calendar:
             ctx = stages.stage_fetch_calendar(ctx)
         if pass_.has_generation:
             ctx = stages.stage_generate(ctx, client=client, pass_=pass_)
-        # edit 모드: stage_prepare가 이미 ctx.spec을 디스크에서 로드해 둠
+        # generation이 없는 PASS(edit)는 prepare_hook이 ctx.batch를 이미 채워둠.
         if pass_.has_review:
             ctx = stages.stage_review(ctx, client=client, pass_=pass_)
             ctx = stages.stage_repair_if_needed(ctx, client=client, pass_=pass_)
 
-    ctx = stages.stage_build_report(ctx)
+    ctx = stages.stage_build_report(ctx, pass_=pass_)
     ctx = stages.stage_persist(ctx)
     if pass_.has_calendar_write:
         ctx = stages.stage_write_calendar(ctx)
-    ctx = stages.stage_notify(ctx)
+    ctx = stages.stage_notify(ctx, pass_=pass_)
 
     usage = ctx.report.get("usage", {}) or {}
     return {

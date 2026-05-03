@@ -9,7 +9,7 @@ import copy
 import json
 import os
 import pathlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from jsonschema import Draft202012Validator
 

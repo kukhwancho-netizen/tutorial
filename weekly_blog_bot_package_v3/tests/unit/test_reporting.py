@@ -14,7 +14,7 @@ def test_build_sketch_report_summary_counts_high_risk(bot_module, cfg):
     spec["items"][2]["risk_hint"] = "high"
     report = bot.build_sketch_report_from_data(
         run_id="weekly-test-sketch",
-        spec=spec,
+        batch=spec,
         config=cfg,
         dry_run=True,
     )
@@ -30,7 +30,7 @@ def test_sketch_report_markdown_renders_topics(bot_module, cfg):
     spec = bot.make_dry_run_spec(cfg, basis)
     report = bot.build_sketch_report_from_data(
         run_id="weekly-test-md",
-        spec=spec,
+        batch=spec,
         config=cfg,
         dry_run=True,
     )
@@ -47,7 +47,7 @@ def test_sketch_report_next_actions_reference_draft_command(bot_module, cfg):
     spec = bot.make_dry_run_spec(cfg, basis)
     report = bot.build_sketch_report_from_data(
         run_id="weekly-test-actions",
-        spec=spec,
+        batch=spec,
         config=cfg,
         dry_run=True,
     )

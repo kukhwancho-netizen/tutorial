@@ -45,11 +45,11 @@ class StageContext:
     dry_run: bool
     no_calendar: bool
     usage: UsageByModel = field(default_factory=UsageByModel)
-    spec_schema: Optional[Dict[str, Any]] = None
+    batch_schema: Optional[Dict[str, Any]] = None
     reviewer_schema: Optional[Dict[str, Any]] = None
     report_schema: Optional[Dict[str, Any]] = None
     calendar_context: Optional[Dict[str, Any]] = None
-    spec: Optional[Dict[str, Any]] = None
+    batch: Optional[Dict[str, Any]] = None
     reviews: Optional[Dict[str, Dict[str, Any]]] = None
     repair_attempted: bool = False
     report: Optional[Dict[str, Any]] = None
@@ -58,9 +58,9 @@ class StageContext:
     md_path: Any = None
     calendar_event_id: Optional[str] = None
     notes: List[str] = field(default_factory=list)
-    pass_label: Optional[str] = None  # outputs 파일명 라벨
-    order: Any = None                 # weekly_blog_bot.pass_def.OrderSpec
-    parent_spec_item: Optional[Dict[str, Any]] = None  # draft 모드의 부모 sketch 1건
+    pass_label: Optional[str] = None
+    order: Any = None
+    parent_spec_item: Optional[Dict[str, Any]] = None
 
 
 # ---------- Result + abort 카테고리 (옛 result.py에서 흡수) ----------

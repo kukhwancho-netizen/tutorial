@@ -42,10 +42,8 @@ from .reporting import (  # noqa: F401
     merge_usage,
     next_actions_for_summary,
     render_draft_item_markdown,
-    render_item_markdown,
     render_report_markdown,
     render_sketch_report_markdown,
-    render_spec_item_markdown,
 )
 from .domain import (  # noqa: F401
     CalendarAuthError,
