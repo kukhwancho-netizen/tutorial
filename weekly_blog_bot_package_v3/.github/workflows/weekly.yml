@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       order:
-        description: '명령 트리거 (예: "블 (민+가+행) 7 ㄱㄱ" / "draft 콘텐츠 3 길이 풀+요약+핵심"). 비우면 기본 spec 모드.'
+        description: 'spec 명령 트리거 (예: "블 (민+가+행) 7 ㄱㄱ"). 비우면 YAML의 order.trigger_text 사용. 본 라운드는 spec 모드만 지원.'
         type: string
         default: ""
       dry_run:

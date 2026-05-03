@@ -46,12 +46,10 @@ from .settings import (
 def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
                   pass_: BatchPass = SPEC_PASS,
                   order: Optional[Any] = None) -> StageContext:
-    """env 로드 + config 로드 + 경로/스키마 준비 + (draft) 부모 spec 로드.
+    """env 로드 + config 로드 + 경로/스키마 준비.
 
-    pass_별 batch 스키마(spec_batch / draft_batch)를 로드한다. order가 주어지면
-    StageContext에 보존돼 generator payload에 흘러간다. draft 모드에서는
-    outputs/의 가장 최근 spec_weekly_report.json에서 parent_spec_id에 해당하는
-    item을 찾아 ctx.parent_spec_item에 둔다 — dry-run/live 모두 적용된다.
+    pass_의 schema_file을 ctx.spec_schema에 로드한다 (본 라운드는 spec_batch만
+    가능). order가 주어지면 StageContext에 보존돼 generator payload에 흘러간다.
     """
     load_environment()
     config = load_yaml(config_path)

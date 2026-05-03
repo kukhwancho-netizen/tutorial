@@ -3,7 +3,7 @@
 ## 흐름
 
 ```text
-GitHub Actions / cron (Sunday 23:30 UTC = Monday 08:30 KST)
+GitHub Actions workflow_dispatch (운영자 수동 트리거 — cron 자동 실행 없음)
   ↓
 weekly_blog_bot.py (얇은 진입점)
   ↓

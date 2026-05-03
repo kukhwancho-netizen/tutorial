@@ -1,7 +1,8 @@
 """파이프라인 오케스트레이터.
 
 단계 함수들을 순서대로 통과시키는 얇은 셸. 비즈니스 로직은 stages에 산다.
-PASS(spec/draft) 디스패치가 여기에서 일어난다.
+본 라운드는 spec PASS 1개만 디스패치 — pass_def.PASS_BY_NAME에 등록된
+PASS만 허용된다.
 """
 from __future__ import annotations
 
