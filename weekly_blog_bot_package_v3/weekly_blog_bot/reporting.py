@@ -151,12 +151,12 @@ def build_report_from_data(
         )
         items_out.append({
             "temp_id": temp_id,
-            "domain": item["domain"],
-            "topic": item["topic"],
+            "domain": _item_domain(item, spec),
+            "topic": _item_topic(item),
             "final_status": final_status,
             "risk": item["risk"]["level"],
             "review_summary": review_summary,
-            "spec_markdown": render_spec_item_markdown(item),
+            "spec_markdown": render_item_markdown(item),
         })
 
     usage_by_model = usage_by_model or {}
@@ -204,6 +204,58 @@ def next_actions_for_summary(publish: int, repair: int, blocked: int, skipped: i
 
 
 # ---------- 마크다운 렌더 ----------
+
+def _is_draft_item(item: Dict[str, Any]) -> bool:
+    """draft 변주는 axis_value를 갖는다 — spec item과 구분하는 가장 신뢰할 만한 마커."""
+    return "axis_value" in item
+
+
+def _item_topic(item: Dict[str, Any]) -> str:
+    return item.get("topic") or item.get("title") or item.get("temp_id", "")
+
+
+def _item_domain(item: Dict[str, Any], spec: Dict[str, Any]) -> str:
+    if "domain" in item:
+        return item["domain"]
+    # draft 모드에서는 batch 레벨의 axis 정보를 분야 라벨 자리에 채운다.
+    axis = spec.get("axis")
+    return f"draft·{axis}" if axis else "draft"
+
+
+def render_item_markdown(item: Dict[str, Any]) -> str:
+    """spec item과 draft 변주를 자동 분기해 마크다운으로 렌더한다."""
+    if _is_draft_item(item):
+        return render_draft_item_markdown(item)
+    return render_spec_item_markdown(item)
+
+
+def render_draft_item_markdown(item: Dict[str, Any]) -> str:
+    outline = "\n".join(f"{idx+1}. {x}" for idx, x in enumerate(item["body_outline"]))
+    paragraphs = "\n\n".join(item["body_paragraphs"])
+    claims = "\n".join(
+        f"- ({c['tag']}) {c['value']} — {c['source']}" for c in item.get("claims", [])
+    )
+    lt = item.get("length_target", {})
+    return textwrap.dedent(f"""
+    ### {item['temp_id']} — {item.get('title', '')}
+
+    - 축값: {item.get('axis_value', '')}
+    - 톤: {item.get('tone_profile', '')}
+    - 길이 목표: {lt.get('min_chars', '?')}~{lt.get('max_chars', '?')}자
+    - 위험도: {item['risk']['level']} / 사람 확인: {item['risk']['human_gate_required']}
+    - lede: {item.get('lede', '')}
+
+    구성안:
+    {outline}
+
+    본문:
+
+    {paragraphs}
+
+    근거:
+    {claims}
+    """).strip()
+
 
 def render_spec_item_markdown(item: Dict[str, Any]) -> str:
     must = "\n".join(f"- {x}" for x in item["must_include"])

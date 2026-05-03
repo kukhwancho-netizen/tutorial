@@ -20,6 +20,7 @@ from .adapters.openai_client import (
 from .budget import enforce_context_budget
 from .domain import StageContext, CalendarAuthError, MalformedModelJSONError
 from .dry_run import (
+    make_dry_run_draft,
     make_dry_run_review,
     make_dry_run_spec,
     make_fallback_reviewer_result,
@@ -78,11 +79,18 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
 
 # ---------- 단계 2: dry-run vs live ----------
 
-def stage_dry_run(ctx: StageContext) -> StageContext:
-    """dry-run 분기: 샘플 spec/reviews만 만들고 검수 호출은 건너뛴다."""
-    ctx.spec = make_dry_run_spec(ctx.config, ctx.basis)
-    validate_json(ctx.spec_schema, ctx.spec, "WeeklySpecBatch")
-    ctx.reviews = {r: make_dry_run_review(r) for r in REVIEWERS}
+def stage_dry_run(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
+    """dry-run 분기: 샘플 batch/reviews만 만들고 검수 호출은 건너뛴다.
+
+    pass_별로 다른 샘플을 사용한다 (spec → make_dry_run_spec, draft →
+    make_dry_run_draft). reviews의 temp_id는 batch의 temp_id를 그대로 미러링한다.
+    """
+    if pass_.name == "draft":
+        ctx.spec = make_dry_run_draft(ctx.config, ctx.basis)
+    else:
+        ctx.spec = make_dry_run_spec(ctx.config, ctx.basis)
+    validate_json(ctx.spec_schema, ctx.spec, pass_.schema_name)
+    ctx.reviews = {r: make_dry_run_review(r, ctx.spec) for r in REVIEWERS}
     for r, data in ctx.reviews.items():
         validate_json(ctx.reviewer_schema, data, f"ReviewerResult-{r}")
     return ctx

@@ -138,12 +138,15 @@ def parse_order(text: str) -> OrderSpec:
         dist_raw = m.group("dist")
         dist_keys = [k.strip() for k in re.split(r"[+,\s]+", dist_raw) if k.strip()]
         distribution = tuple(_DOMAIN_LONG.get(k, k) for k in dist_keys)
+        total = int(m.group("total"))
+        if total < 1:
+            raise OrderParseError(f"spec order total must be >= 1: {raw!r}")
         return OrderSpec(
             mode="spec",
             raw=raw,
             channel=channel,
             distribution=distribution,
-            total=int(m.group("total")),
+            total=total,
         )
 
     raise OrderParseError(f"unrecognized order: {raw!r}")

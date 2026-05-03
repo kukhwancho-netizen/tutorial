@@ -101,6 +101,17 @@ def test_parse_order_draft_without_variants_raises():
         parse_order("draft 콘텐츠 1 길이    ")
 
 
+def test_parse_order_spec_zero_total_raises():
+    with pytest.raises(OrderParseError):
+        parse_order("블 (민) 0")
+
+
+def test_parse_order_spec_negative_total_via_format_rejected():
+    # 정규식이 음수 부호를 거부 → unrecognized로 떨어진다.
+    with pytest.raises(OrderParseError):
+        parse_order("블 (민) -3")
+
+
 # ---------- order_from_args ----------
 
 def test_order_from_args_spec_minimal():
