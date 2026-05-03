@@ -106,7 +106,10 @@ def stage_fetch_calendar(ctx: StageContext) -> StageContext:
 # ---------- 단계 3: 생성 ----------
 
 def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
-    """generator/repair 단계 모델 입력. OrderSpec.to_payload_dict로 모드 분기 캡슐화."""
+    """generator/repair 단계 모델 입력. OrderSpec.to_payload_dict로 모드 분기 캡슐화.
+
+    PASS-별 추가 페이로드(예: draft의 parent_spec_item)는 ctx.payload_extras에서 병합.
+    """
     default_trigger = ctx.config["order"]["trigger_text"]
     if ctx.order is not None:
         order_field = ctx.order.to_payload_dict(default_trigger=default_trigger)
@@ -121,8 +124,7 @@ def _make_order_payload(ctx: StageContext) -> Dict[str, Any]:
         "case_law_policy": ctx.config.get("knowledge", {}).get("case_law", {}),
         "config": model_facing_config(ctx.config),
     }
-    if ctx.parent_spec_item is not None:
-        payload["parent_spec_item"] = ctx.parent_spec_item
+    payload.update(ctx.payload_extras)
     return payload
 
 
@@ -157,12 +159,11 @@ def _call_reviewer(*, client: Any, ctx: StageContext, reviewer: str,
     max_tokens = int(openai_cfg.get("max_output_tokens", 12000))
     use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     reviewer_payload = {
-        "spec_batch": ctx.batch,
+        "batch": ctx.batch,
         "config": model_facing_config(ctx.config),
         "calendar_context": ctx.calendar_context,
     }
-    if ctx.parent_spec_item is not None:
-        reviewer_payload["parent_spec_item"] = ctx.parent_spec_item
+    reviewer_payload.update(ctx.payload_extras)
     enforce_context_budget(ctx.config, reviewer_payload, stage_label)
     reviewer_model = resolve_reviewer_model(ctx.config, reviewer)
     try:
@@ -211,12 +212,11 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any,
     use_web = bool(openai_cfg.get("use_web_search", True)) and pass_.use_web_search
     model_ids = model_ids_from_config(ctx.config)
     repair_payload = {
-        "spec_batch": ctx.batch,
+        "batch": ctx.batch,
         "reviews": ctx.reviews,
         "config": model_facing_config(ctx.config),
     }
-    if ctx.parent_spec_item is not None:
-        repair_payload["parent_spec_item"] = ctx.parent_spec_item
+    repair_payload.update(ctx.payload_extras)
     enforce_context_budget(ctx.config, repair_payload, f"repair-{pass_.name}")
     try:
         repair_result = call_openai_json(
@@ -260,7 +260,7 @@ def stage_build_report(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> St
         dry_run=ctx.dry_run,
         config=ctx.config,
     )
-    validate_json(ctx.report_schema, ctx.report, pass_.schema_name + "Report")
+    validate_json(ctx.report_schema, ctx.report, pass_.report_schema_name)
     ctx.markdown = pass_.markdown_renderer(ctx.report, ctx.reviews or {})
     return ctx
 
@@ -275,7 +275,7 @@ def stage_persist(ctx: StageContext) -> StageContext:
     if ctx.config.get("outputs", {}).get("save_json", True):
         write_json(
             ctx.json_path,
-            {"report": ctx.report, "spec_batch": ctx.batch, "reviews": ctx.reviews or {}},
+            {"report": ctx.report, "batch": ctx.batch, "reviews": ctx.reviews or {}},
         )
     if ctx.config.get("outputs", {}).get("save_markdown", True):
         ctx.md_path.write_text(ctx.markdown, encoding="utf-8")

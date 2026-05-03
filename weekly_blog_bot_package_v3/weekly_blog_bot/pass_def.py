@@ -59,6 +59,7 @@ class BatchPass:
     use_web_search: bool
     output_label: str
     report_schema_file: str
+    report_schema_name: str          # 검증 라벨 (오류 메시지용 — 실제 schema title과 일치해야 한다)
     # capability flags
     has_generation: bool
     has_review: bool
@@ -98,10 +99,10 @@ def _draft_prepare_hook(ctx: Any) -> None:
         )
     latest = candidates[0]
     data = _load_json(latest)
-    spec_batch = data.get("spec_batch") or {}
-    for item in spec_batch.get("items", []):
+    parent_batch = data.get("batch") or {}
+    for item in parent_batch.get("items", []):
         if item.get("temp_id") == parent_spec_id:
-            ctx.parent_spec_item = item
+            ctx.payload_extras["parent_spec_item"] = item
             return
     raise PipelineAbort(
         f"parent_spec_id {parent_spec_id!r} not found in {latest.name}",
@@ -143,7 +144,7 @@ def _edit_prepare_hook(ctx: Any) -> None:
             )
     for path in candidates:
         data = _load_json(path)
-        batch = data.get("spec_batch") or {}
+        batch = data.get("batch") or {}
         for item in batch.get("items", []):
             if item.get("temp_id") == target_temp_id:
                 ctx.batch = batch
@@ -182,6 +183,7 @@ SPEC_PASS = BatchPass(
     use_web_search=True,
     output_label="spec",
     report_schema_file="sketch_report.schema.json",
+    report_schema_name="WeeklySketchReport",
     has_generation=True,
     has_review=False,
     has_calendar_write=False,
@@ -208,6 +210,7 @@ DRAFT_PASS = BatchPass(
     use_web_search=True,
     output_label="draft",
     report_schema_file="final_report.schema.json",
+    report_schema_name="WeeklyFinalReport",
     has_generation=True,
     has_review=True,
     has_calendar_write=True,
@@ -234,6 +237,7 @@ EDIT_PASS = BatchPass(
     use_web_search=True,
     output_label="edit",
     report_schema_file="final_report.schema.json",
+    report_schema_name="WeeklyFinalReport",
     has_generation=False,
     has_review=True,
     has_calendar_write=True,

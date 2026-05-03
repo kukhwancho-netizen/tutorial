@@ -60,7 +60,9 @@ class StageContext:
     notes: List[str] = field(default_factory=list)
     pass_label: Optional[str] = None
     order: Any = None
-    parent_spec_item: Optional[Dict[str, Any]] = None
+    # PASS-별 추가 페이로드. prepare_hook이나 fetch 단계가 채워두면 generator/
+    # reviewer/repair 페이로드에 그대로 병합된다 (예: draft의 parent_spec_item).
+    payload_extras: Dict[str, Any] = field(default_factory=dict)
 
 
 # ---------- Result + abort 카테고리 (옛 result.py에서 흡수) ----------

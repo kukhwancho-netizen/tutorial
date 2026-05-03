@@ -64,9 +64,9 @@ def test_draft_dry_run_produces_final_report(tmp_path, bot_module, cfg, root_pat
     assert "_draft_" in json_path.name
     data = bot.load_json(json_path)
     # Order-aware dry-run: variants 개수만큼 sample 생성.
-    assert len(data["spec_batch"]["items"]) == 3
-    assert data["spec_batch"]["parent_spec_id"] == "콘텐츠 3"
-    assert data["spec_batch"]["axis"] == "길이"
+    assert len(data["batch"]["items"]) == 3
+    assert data["batch"]["parent_spec_id"] == "콘텐츠 3"
+    assert data["batch"]["axis"] == "길이"
     for review in data["reviews"].values():
         assert len(review["item_results"]) == 3
 
@@ -117,7 +117,7 @@ def test_draft_dry_run_reflects_order(tmp_path, bot_module, cfg, root_path):
     result = bot.run(cfg_path, dry_run=True, no_calendar=True, order=order)
     json_path = pathlib.Path(result["json_path"])
     data = bot.load_json(json_path)
-    batch = data["spec_batch"]
+    batch = data["batch"]
     assert batch["parent_spec_id"] == "콘텐츠 5"
     assert batch["axis"] == "후보"
     assert [it["axis_value"] for it in batch["items"]] == ["A", "B", "C"]
@@ -132,7 +132,7 @@ def test_edit_dry_run_reflects_target(tmp_path, bot_module, cfg, root_path):
     result = bot.run(cfg_path, dry_run=True, no_calendar=True, order=order)
     json_path = pathlib.Path(result["json_path"])
     data = bot.load_json(json_path)
-    items = data["spec_batch"]["items"]
+    items = data["batch"]["items"]
     assert len(items) == 1
     assert items[0]["temp_id"] == "콘텐츠 7.핵"  # axis_value 첫 글자로 suffix
     assert items[0]["axis_value"] == "핵심"

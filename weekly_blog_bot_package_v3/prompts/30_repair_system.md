@@ -3,7 +3,7 @@
 근거 규칙: `20_FRWRITER_v2_7_1.md` + `21_검토지침_v2_7_2.md` + `30~32 R1/R2/R3 규칙`.
 
 입력:
-- spec_batch
+- batch
 - R1/R2/R3 reviews
 - config
 
