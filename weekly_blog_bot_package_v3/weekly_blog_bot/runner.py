@@ -1,8 +1,8 @@
 """파이프라인 오케스트레이터.
 
-단계 함수들을 순서대로 통과시키는 얇은 셸. 비즈니스 로직은 stages에 산다.
-본 라운드는 spec PASS 1개만 디스패치 — pass_def.PASS_BY_NAME에 등록된
-PASS만 허용된다.
+PASS의 capability(has_review / has_calendar_write)를 보고 단계를 건너뛴다.
+spec sketch는 generator → report → persist 만 통과. draft 등 검수 PASS는
+review/repair/calendar_write까지 통과.
 """
 from __future__ import annotations
 
@@ -30,12 +30,14 @@ def run(config_path: pathlib.Path, *, dry_run: bool = False,
         client = make_client()
         ctx = stages.stage_fetch_calendar(ctx)
         ctx = stages.stage_generate(ctx, client=client, pass_=pass_)
-        ctx = stages.stage_review(ctx, client=client, pass_=pass_)
-        ctx = stages.stage_repair_if_needed(ctx, client=client, pass_=pass_)
+        if pass_.has_review:
+            ctx = stages.stage_review(ctx, client=client, pass_=pass_)
+            ctx = stages.stage_repair_if_needed(ctx, client=client, pass_=pass_)
 
     ctx = stages.stage_build_report(ctx)
     ctx = stages.stage_persist(ctx)
-    ctx = stages.stage_write_calendar(ctx)
+    if pass_.has_calendar_write:
+        ctx = stages.stage_write_calendar(ctx)
     ctx = stages.stage_notify(ctx)
 
     usage = ctx.report.get("usage", {}) or {}

@@ -22,11 +22,16 @@ class BatchPass:
     schema_name: str                       # "WeeklySpecBatch"
     schema_file: str                       # schemas/ 하위 파일명
     generator_prompt_file: str             # prompts/ 하위
-    reviewer_prompt_files: Dict[str, str]  # {"R1": "...", ...}
-    repair_prompt_file: str
+    # reviewer/repair는 검수가 있는 PASS만 채운다. spec sketch는 빈 dict / None.
+    reviewer_prompt_files: Dict[str, str]
+    repair_prompt_file: Optional[str]
     decision_rules: List[Tuple[Callable, str]]
     use_web_search: bool
     output_label: str
+    # report/persist 관련
+    report_schema_file: str                # schemas/ 하위 (sketch_report or final_report)
+    has_review: bool                       # 검수 단계 활성화 여부
+    has_calendar_write: bool               # spec sketch는 캘린더 미기록
 
 
 SPEC_PASS = BatchPass(
@@ -34,15 +39,14 @@ SPEC_PASS = BatchPass(
     schema_name="WeeklySpecBatch",
     schema_file="spec_batch.schema.json",
     generator_prompt_file="10_generator_system.md",
-    reviewer_prompt_files={
-        "R1": "20_reviewer_r1_system.md",
-        "R2": "21_reviewer_r2_system.md",
-        "R3": "22_reviewer_r3_system.md",
-    },
-    repair_prompt_file="30_repair_system.md",
+    reviewer_prompt_files={},
+    repair_prompt_file=None,
     decision_rules=decision.SPEC_RULES,
     use_web_search=True,
     output_label="spec",
+    report_schema_file="sketch_report.schema.json",
+    has_review=False,
+    has_calendar_write=False,
 )
 
 PASS_BY_NAME: Dict[str, BatchPass] = {SPEC_PASS.name: SPEC_PASS}

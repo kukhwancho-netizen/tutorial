@@ -36,10 +36,12 @@ from .dry_run import (  # noqa: F401
 )
 from .reporting import (  # noqa: F401
     build_report_from_data,
+    build_sketch_report_from_data,
     estimate_cost_usd,
     merge_usage,
     next_actions_for_summary,
     render_report_markdown,
+    render_sketch_report_markdown,
     render_spec_item_markdown,
 )
 from .domain import (  # noqa: F401

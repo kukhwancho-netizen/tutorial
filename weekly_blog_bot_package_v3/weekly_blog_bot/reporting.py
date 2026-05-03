@@ -187,6 +187,90 @@ def build_report_from_data(
     }
 
 
+# ---------- sketch 리포트 (검수 없는 spec 단계) ----------
+
+def build_sketch_report_from_data(
+    *,
+    run_id: str,
+    spec: Dict[str, Any],
+    usage_by_model: Optional[Dict[str, Dict[str, int]]] = None,
+    dry_run: bool = False,
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    """검수 없이 spec sketch만 묶는다. summary는 sketches/high_risk_hint만."""
+    items_out = [
+        {
+            "temp_id": it["temp_id"],
+            "channel": it["channel"],
+            "topic": it["topic"],
+            "risk_hint": it["risk_hint"],
+            **({"rationale": it["rationale"]} if "rationale" in it else {}),
+        }
+        for it in spec.get("items", [])
+    ]
+    high_risk_hint = sum(1 for it in items_out if it["risk_hint"] == "high")
+
+    usage_by_model = usage_by_model or {}
+    usage_total = merge_usage(usage_by_model.values())
+    cost_warnings: List[str] = []
+    estimated_cost = estimate_cost_usd(config, usage_by_model, warnings=cost_warnings) if usage_by_model else 0.0
+
+    next_actions = []
+    if items_out:
+        next_actions.append(
+            "스케치 검토 후 draft 명령으로 본문 생성: 'draft 콘텐츠 N (axis values...)'"
+        )
+    if high_risk_hint:
+        next_actions.append(
+            f"risk_hint=high {high_risk_hint}건은 draft 단계에서 사람 게이트 권장"
+        )
+
+    return {
+        "run_id": run_id,
+        "run_status": "dry_run" if dry_run else "completed",
+        "basis_date": spec["basis_date"],
+        "order": spec["order"],
+        "summary": {"sketches": len(items_out), "high_risk_hint": high_risk_hint},
+        "usage": {
+            "by_model": usage_by_model,
+            "total": usage_total,
+            "estimated_cost_usd": estimated_cost,
+            "cost_warnings": cost_warnings,
+        },
+        "items": items_out,
+        "next_actions": next_actions or ["처리할 후속 액션 없음"],
+    }
+
+
+def render_sketch_report_markdown(report: Dict[str, Any]) -> str:
+    summary = report["summary"]
+    usage = report.get("usage", {})
+    lines = [
+        f"# 주간 블로그 sketch 결과 — {report['basis_date']}",
+        "",
+        f"- run_id: {report['run_id']}",
+        f"- run_status: {report['run_status']}",
+        f"- 주문: {report['order']}",
+        f"- 토픽 수: {summary['sketches']}",
+        f"- risk_hint=high: {summary['high_risk_hint']}",
+        f"- estimated_cost_usd: {usage.get('estimated_cost_usd', 0.0)}",
+        "",
+        f"## 토픽 ({summary['sketches']}건)",
+        "",
+    ]
+    for it in report["items"]:
+        lines.append(f"### {it['temp_id']} — {it['topic']}")
+        lines.append("")
+        lines.append(f"- 채널: {it['channel']}")
+        lines.append(f"- risk_hint: {it['risk_hint']}")
+        if it.get("rationale"):
+            lines.append(f"- 선정 근거: {it['rationale']}")
+        lines.append("")
+    lines.extend(["## 다음 액션", ""])
+    lines.extend(f"- {x}" for x in report["next_actions"])
+    return "\n".join(lines).strip() + "\n"
+
+
 def next_actions_for_summary(publish: int, repair: int, blocked: int, skipped: int) -> List[str]:
     if skipped:
         return [

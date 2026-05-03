@@ -114,12 +114,16 @@ def test_order_from_args_draft_rejected_in_this_round():
 # ---------- BatchPass file references resolve ----------
 
 def test_spec_pass_schema_and_prompts_exist(root_path):
+    """SPEC_PASS는 sketch 모드 — generator + report schema만 필수."""
     pass_ = SPEC_PASS
     assert (root_path / "schemas" / pass_.schema_file).is_file()
+    assert (root_path / "schemas" / pass_.report_schema_file).is_file()
     assert (root_path / "prompts" / pass_.generator_prompt_file).is_file()
-    assert (root_path / "prompts" / pass_.repair_prompt_file).is_file()
-    for fname in pass_.reviewer_prompt_files.values():
-        assert (root_path / "prompts" / fname).is_file()
+    # sketch 모드는 reviewer/repair 없음.
+    assert pass_.reviewer_prompt_files == {}
+    assert pass_.repair_prompt_file is None
+    assert pass_.has_review is False
+    assert pass_.has_calendar_write is False
 
 
 # ---------- spec OrderSpec → payload ----------

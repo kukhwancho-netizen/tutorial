@@ -25,7 +25,12 @@ from .dry_run import (
     make_fallback_reviewer_result,
 )
 from .pass_def import SPEC_PASS, BatchPass
-from .reporting import build_report_from_data, render_report_markdown
+from .reporting import (
+    build_report_from_data,
+    build_sketch_report_from_data,
+    render_report_markdown,
+    render_sketch_report_markdown,
+)
 from .settings import (
     REVIEWERS,
     load_environment,
@@ -71,8 +76,11 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
         no_calendar=no_calendar,
     )
     ctx.spec_schema = load_json(paths.schemas / pass_.schema_file)
-    ctx.reviewer_schema = load_json(paths.schemas / "reviewer_result.schema.json")
-    ctx.report_schema = load_json(paths.schemas / "final_report.schema.json")
+    ctx.report_schema = load_json(paths.schemas / pass_.report_schema_file)
+    if pass_.has_review:
+        ctx.reviewer_schema = load_json(paths.schemas / "reviewer_result.schema.json")
+    else:
+        ctx.reviewer_schema = None
     ctx.pass_label = pass_.output_label
     ctx.order = order
     return ctx
@@ -81,12 +89,15 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
 # ---------- 단계 2: dry-run vs live ----------
 
 def stage_dry_run(ctx: StageContext) -> StageContext:
-    """dry-run 분기: 샘플 spec/reviews만 만들고 검수 호출은 건너뛴다."""
+    """dry-run 분기: 샘플 batch만 만든다. 검수가 있는 PASS만 더미 reviews도 채운다."""
     ctx.spec = make_dry_run_spec(ctx.config, ctx.basis)
     validate_json(ctx.spec_schema, ctx.spec, "WeeklySpecBatch")
-    ctx.reviews = {r: make_dry_run_review(r) for r in REVIEWERS}
-    for r, data in ctx.reviews.items():
-        validate_json(ctx.reviewer_schema, data, f"ReviewerResult-{r}")
+    if ctx.reviewer_schema is not None:
+        ctx.reviews = {r: make_dry_run_review(r) for r in REVIEWERS}
+        for r, data in ctx.reviews.items():
+            validate_json(ctx.reviewer_schema, data, f"ReviewerResult-{r}")
+    else:
+        ctx.reviews = {}
     return ctx
 
 
@@ -262,17 +273,29 @@ def stage_repair_if_needed(ctx: StageContext, *, client: Any,
 # ---------- 단계 6: 리포트 ----------
 
 def stage_build_report(ctx: StageContext) -> StageContext:
-    ctx.report = build_report_from_data(
-        run_id=ctx.run_id,
-        spec=ctx.spec,
-        reviews=ctx.reviews,
-        repair_attempted=ctx.repair_attempted,
-        usage_by_model=ctx.usage.by_model,
-        dry_run=ctx.dry_run,
-        config=ctx.config,
-    )
-    validate_json(ctx.report_schema, ctx.report, "WeeklyFinalReport")
-    ctx.markdown = render_report_markdown(ctx.report, ctx.reviews)
+    """spec sketch는 검수 없는 sketch 리포트, 검수가 있는 PASS는 final 리포트."""
+    if not ctx.reviews:
+        ctx.report = build_sketch_report_from_data(
+            run_id=ctx.run_id,
+            spec=ctx.spec,
+            usage_by_model=ctx.usage.by_model,
+            dry_run=ctx.dry_run,
+            config=ctx.config,
+        )
+        validate_json(ctx.report_schema, ctx.report, "WeeklySketchReport")
+        ctx.markdown = render_sketch_report_markdown(ctx.report)
+    else:
+        ctx.report = build_report_from_data(
+            run_id=ctx.run_id,
+            spec=ctx.spec,
+            reviews=ctx.reviews,
+            repair_attempted=ctx.repair_attempted,
+            usage_by_model=ctx.usage.by_model,
+            dry_run=ctx.dry_run,
+            config=ctx.config,
+        )
+        validate_json(ctx.report_schema, ctx.report, "WeeklyFinalReport")
+        ctx.markdown = render_report_markdown(ctx.report, ctx.reviews)
     return ctx
 
 
@@ -315,11 +338,20 @@ def stage_notify(ctx: StageContext) -> StageContext:
         return ctx
     summary = ctx.report.get("summary", {})
     title = f"주간 블로그 봇 알림: {', '.join(events)}"
+    if "sketches" in summary:
+        body_summary = (
+            f"sketches={summary.get('sketches')} / "
+            f"high_risk_hint={summary.get('high_risk_hint')}"
+        )
+    else:
+        body_summary = (
+            f"통과={summary.get('publish_candidates')} / 수정={summary.get('needs_repair')} "
+            f"/ 보류={summary.get('blocked')} / 사람확인={summary.get('human_gate')}"
+        )
     body = (
         f"run_id={ctx.report.get('run_id')}\n"
         f"basis_date={ctx.report.get('basis_date')}\n"
-        f"통과={summary.get('publish_candidates')} / 수정={summary.get('needs_repair')} "
-        f"/ 보류={summary.get('blocked')} / 사람확인={summary.get('human_gate')}\n"
+        f"{body_summary}\n"
         f"report={ctx.md_path}"
     )
     notifications.send_notification(ctx.config, title=title, body=body, events=events)

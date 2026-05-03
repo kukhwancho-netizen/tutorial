@@ -8,10 +8,9 @@ from __future__ import annotations
 import pathlib
 
 
-def test_dry_run_uses_skipped_reviews(tmp_path, bot_module, cfg, root_path):
-    """dry-run이 R1/R2/R3=skipped로 동작하고 격리된 outputs에 쓰이는지 확인."""
+def test_spec_dry_run_produces_sketch_report(tmp_path, bot_module, cfg, root_path):
+    """spec dry-run은 sketch 리포트를 만들고 검수 없이 통과한다."""
     bot = bot_module
-    # ROOT의 schemas/prompts를 tmp_path에 심볼릭 링크해서 패키지 outputs를 오염시키지 않는다.
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
     for name in ("schemas", "prompts"):
         (tmp_path / name).symlink_to(root_path / name, target_is_directory=True)
@@ -25,16 +24,21 @@ def test_dry_run_uses_skipped_reviews(tmp_path, bot_module, cfg, root_path):
 
     result = bot.run(cfg_path, dry_run=True, no_calendar=True)
     assert result["run_status"] == "dry_run"
-    assert result["summary"]["dry_run_skipped"] == 7
-    assert result["summary"]["needs_repair"] == 0
-    assert result["summary"]["blocked"] == 0
+    assert result["pass"] == "spec"
+    assert result["summary"]["sketches"] == 7
+    assert result["summary"]["high_risk_hint"] == 0
 
     json_path = pathlib.Path(result["json_path"])
     assert tmp_path in json_path.parents, f"report should be inside tmp_path, got {json_path}"
-    assert "_spec_" in json_path.name, f"spec dry-run filename should embed pass label: {json_path.name}"
+    assert "_spec_" in json_path.name
     data = bot.load_json(json_path)
-    assert all(review["verdict"] == "skipped" for review in data["reviews"].values())
-    assert all(item["final_status"] == "검수 생략(dry-run)" for item in data["report"]["items"])
+    # sketch 단계는 reviews가 비어있다.
+    assert data["reviews"] == {}
+    # report items는 4개 핵심 필드만.
+    for item in data["report"]["items"]:
+        assert set(item).issuperset({"temp_id", "channel", "topic", "risk_hint"})
+        assert "final_status" not in item  # 검수 없음
+        assert "domain" not in item        # 슬림 sketch에 없음
 
 
 def test_draft_order_explicitly_rejected(bot_module):
