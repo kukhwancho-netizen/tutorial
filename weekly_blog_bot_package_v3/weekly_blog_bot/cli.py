@@ -3,11 +3,8 @@
 ``python -m weekly_blog_bot`` 또는 ``weekly_blog_bot.py`` 셸을 통해 호출된다.
 abort는 항상 abort 리포트를 시도하고, 그 자체가 실패해도 원래 원인을 stderr에 남긴다.
 
-명령 디스패치:
-- ``--order "블 (민+가+행) 7 ㄱㄱ"`` 같은 자유 텍스트 → parse_order로 OrderSpec
-- ``--mode draft --parent-spec-id "콘텐츠 3" --axis 길이 --variants 풀 요약 핵심``
-  처럼 명시 인자 → order_from_args로 OrderSpec
-- 둘 다 없으면 기본 spec PASS
+본 라운드는 spec PASS만 지원한다. ``--order``는 자유 텍스트 트리거를 받지만
+draft 트리거는 명시적으로 거부된다 (parse_order에서 OrderParseError).
 """
 from __future__ import annotations
 
@@ -19,29 +16,22 @@ from typing import Optional
 
 from . import runner, stages
 from .adapters.openai_client import validate_configured_models
-from .pass_def import OrderSpec, order_from_args, parse_order, pass_for
+from .pass_def import OrderSpec, parse_order, pass_for
 
 
 def _build_order(args: argparse.Namespace) -> Optional[OrderSpec]:
     if args.order:
         return parse_order(args.order)
-    if args.mode:
-        return order_from_args(
-            mode=args.mode,
-            parent_spec_id=args.parent_spec_id,
-            axis=args.axis,
-            variants=tuple(args.variants or ()),
-        )
     return None
 
 
 def _pass_label_from_order(order: Optional[OrderSpec]) -> Optional[str]:
-    """abort 파일명용 라벨. order가 None이면 runner가 spec PASS를 기본으로 쓰므로 'spec'."""
+    """abort 파일명용 라벨. order가 없으면 spec(기본)."""
     if order is None:
         return "spec"
     try:
         return pass_for(order).output_label
-    except KeyError:
+    except Exception:
         return None
 
 
@@ -54,18 +44,8 @@ def main() -> None:
                         help="client.models.list() + 짧은 ping으로 설정 모델 검증")
     parser.add_argument("--skip-model-ping", action="store_true",
                         help="models.list 검증만 수행하고 ping 생략")
-    # 명령 디스패처 인자
     parser.add_argument("--order", default=None,
-                        help='자유 텍스트 트리거 (예: "블 (민+가+행) 7 ㄱㄱ" 또는 '
-                             '"draft 콘텐츠 3 길이 풀+요약+핵심")')
-    parser.add_argument("--mode", choices=["spec", "draft"], default=None,
-                        help="명시 모드 (--order 없이 사용)")
-    parser.add_argument("--parent-spec-id", default=None,
-                        help="draft 모드: 부모 spec temp_id (예: '콘텐츠 3')")
-    parser.add_argument("--axis", choices=["각도", "길이", "후보", "버전"], default=None,
-                        help="draft 모드: 변주 축")
-    parser.add_argument("--variants", nargs="+", default=None,
-                        help="draft 모드: 축 위의 값 목록 (예: 풀 요약 핵심)")
+                        help='자유 텍스트 트리거 (예: "블 (민+가+행) 7 ㄱㄱ"). 본 라운드는 spec만 허용.')
     args = parser.parse_args()
 
     config_path = pathlib.Path(args.config).resolve()
@@ -83,7 +63,6 @@ def main() -> None:
             )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except Exception as exc:
-        # write_abort_report 자체 실패에도 원래 abort 원인이 stderr에 남도록 감싼다.
         try:
             abort_result = stages.write_abort_report(
                 config_path, exc, pass_label=_pass_label_from_order(order)

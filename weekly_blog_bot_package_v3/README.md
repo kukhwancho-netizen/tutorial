@@ -1,6 +1,6 @@
 # 주간 블로그 편성봇
 
-법률 콘텐츠용 주간 자동 편성 파이프라인이다. 기본값은 **제작지시서 7건 생성 + R1/R2/R3 분리 검수 + 보정 1회 + 리포트 저장**이다. PASS 추상화로 spec(제작지시서) 모드와 draft(초안) 모드를 같은 단계 흐름이 공유한다.
+법률 콘텐츠용 주간 자동 편성 파이프라인이다. **제작지시서 7건 생성 + R1/R2/R3 분리 검수 + 보정 1회 + 리포트 저장**이다 (spec PASS). draft(초안) PASS는 PASS 추상화의 한계가 드러나 본 라운드에서 들어내고 다음 라운드에서 구조적으로 다시 들어온다.
 
 ## 근거 규칙 문서 (저장소 루트)
 
@@ -11,11 +11,11 @@
 | L0 구조 | [`00_파이프라인_v3_최상위_구조.md`](../00_파이프라인_v3_최상위_구조.md) | 파일 존재성 계약 (§2.1) |
 | L1 메타 | [`01_최우선_규칙.md`](../01_최우선_규칙.md), [`02_통합본_메타규칙.md`](../02_통합본_메타규칙.md) | 전 단계 |
 | L2 실행 | [`11_파일_접근_규칙_v2_0.md`](../11_파일_접근_규칙_v2_0.md) | `settings.py` 경로/소환 규칙 |
-| L3 작성 | [`20_FRWRITER_v2_7_1.md`](../20_FRWRITER_v2_7_1.md), [`22_법률상담_문체_보정_v1_1.md`](../22_법률상담_문체_보정_v1_1.md) | `prompts/10_generator_*`, `prompts/11_draft_generator_*` |
+| L3 작성 | [`20_FRWRITER_v2_7_1.md`](../20_FRWRITER_v2_7_1.md), [`22_법률상담_문체_보정_v1_1.md`](../22_법률상담_문체_보정_v1_1.md) | `prompts/10_generator_*` |
 | L3 검토 | [`21_검토지침_v2_7_2.md`](../21_검토지침_v2_7_2.md), [`33_내부_검토_다면화_매트릭스.md`](../33_내부_검토_다면화_매트릭스.md) | 검토관 일반 지침 |
 | L3 인스타 | [`23_옥토리타스_v3_3_1-4doc_db.md`](../23_옥토리타스_v3_3_1-4doc_db.md) | 트랙 2 (본 봇 미사용) |
-| L4 검토관 | [`30_R1_규칙감사관_v2.md`](../30_R1_규칙감사관_v2.md), [`31_R2_법률검수관_v2.md`](../31_R2_법률검수관_v2.md), [`32_R3_문서검토관_v2.md`](../32_R3_문서검토관_v2.md) | `prompts/20~22_reviewer_r*_system.md` (spec), `prompts/23~25_reviewer_r*_draft.md` (draft) |
-| L4 스키마 | [`34_JSON_schema_2종.md`](../34_JSON_schema_2종.md) | `schemas/spec_batch.schema.json`, `schemas/draft_batch.schema.json` |
+| L4 검토관 | [`30_R1_규칙감사관_v2.md`](../30_R1_규칙감사관_v2.md), [`31_R2_법률검수관_v2.md`](../31_R2_법률검수관_v2.md), [`32_R3_문서검토관_v2.md`](../32_R3_문서검토관_v2.md) | `prompts/20~22_reviewer_r*_system.md` |
+| L4 스키마 | [`34_JSON_schema_2종.md`](../34_JSON_schema_2종.md) | `schemas/spec_batch.schema.json` |
 | L5 운영 | [`40_리서처_실험_로그.md`](../40_리서처_실험_로그.md), [`41_실험_로그_v1_9_추가_항목.md`](../41_실험_로그_v1_9_추가_항목.md) | 운영 로그 |
 | L7 정본 | [`52_빌더_인스트럭션_압축본.txt`](../52_빌더_인스트럭션_압축본.txt) | Custom GPT Builder Instructions |
 | 데이터 | [`참조_판례_정리본.txt`](../참조_판례_정리본.txt) | 판례 RAG (벡터 스토어 권장) |
@@ -43,10 +43,10 @@
 weekly_blog_bot_package_v3/
 ├── weekly_blog_bot.py          # 얇은 진입점 (CLI 셸 + 호환 export)
 ├── weekly_blog_bot/            # 핵심 패키지
-│   ├── runner.py               # 파이프라인 오케스트레이터 (PASS 디스패치)
+│   ├── runner.py               # 파이프라인 오케스트레이터
 │   ├── stages.py               # 단계별 함수 (준비→캘린더→생성→검수→보정→리포트→저장→캘린더 쓰기→알림)
-│   ├── pass_def.py             # BatchPass 추상화 + SPEC_PASS/DRAFT_PASS + parse_order
-│   ├── decision.py             # 최종 상태 의사결정 표 (SPEC_RULES/DRAFT_RULES)
+│   ├── pass_def.py             # BatchPass(SPEC_PASS) + OrderSpec + parse_order
+│   ├── decision.py             # 최종 상태 의사결정 표 (SPEC_RULES)
 │   ├── reporting.py            # 리포트 빌드 + 비용 추정 + 마크다운
 │   ├── budget.py               # 컨텍스트 토큰 예산 가드
 │   ├── dry_run.py              # dry-run 샘플 데이터 + reporting 순환 차단
@@ -60,8 +60,8 @@ weekly_blog_bot_package_v3/
 ├── tests/
 │   ├── unit/                   # 단위 테스트 (빠름, PR 합치기 게이트)
 │   └── integration/            # 통합 테스트 (전체 흐름)
-├── schemas/                    # spec_batch / draft_batch / reviewer_result / final_report
-├── prompts/                    # spec: 10/20~22/30  draft: 11/23~25/31
+├── schemas/                    # spec_batch / reviewer_result / final_report
+├── prompts/                    # 10_generator / 20~22_reviewer / 30_repair / 90_manual_run
 └── config/weekly_blog_bot.yaml
 ```
 
@@ -113,7 +113,7 @@ python weekly_blog_bot.py --config config/weekly_blog_bot.yaml
 workflow 파일: `.github/workflows/weekly.yml`. **`workflow_dispatch`만 정상 경로** — cron 자동 실행은 제거됨. 운영자가 매번 명령을 내려야 1회분이 산출된다.
 
 dispatch 입력:
-- `order` — 자유 텍스트 트리거 (예: `블 (민+가+행) 7 ㄱㄱ` 또는 `draft 콘텐츠 3 길이 풀+요약+핵심`). 비우면 기본 spec 모드.
+- `order` — 자유 텍스트 트리거 (예: `블 (민+가+행) 7 ㄱㄱ`). 비우면 YAML의 `order.trigger_text` 사용.
 - `dry_run` — true면 API/Calendar 호출 없이 sample report만 생성.
 - `no_calendar` — true면 Calendar 읽기/쓰기 비활성.
 
@@ -127,13 +127,11 @@ R2는 web search를 보정 전후로 각각 호출한다. 즉 1주일에 R2 web 
 
 ## 출력
 
-PASS 라벨이 파일명에 박힌다 (`spec` / `draft`).
+PASS 라벨이 파일명에 박힌다 (`spec` 고정).
 
 ```text
 outputs/YYYY-MM-DD_weekly-..._spec_weekly_report.json
 outputs/YYYY-MM-DD_weekly-..._spec_weekly_report.md
-outputs/YYYY-MM-DD_weekly-..._draft_weekly_report.json
-outputs/YYYY-MM-DD_weekly-..._draft_weekly_report.md
 ```
 
 JSON에는 `report.usage`가 포함된다.
@@ -148,14 +146,6 @@ jq '.report.usage' outputs/*weekly_report.json
 # spec 생성 (제작지시서 7건)
 python weekly_blog_bot.py --order "블 (민+가+행) 7 ㄱㄱ"
 
-# draft 생성 (사람이 spec 검토 후, 통과한 한 건에 대한 변주 생성)
-python weekly_blog_bot.py --order "draft 콘텐츠 3 길이 풀+요약+핵심"
-python weekly_blog_bot.py --order "draft 콘텐츠 5 후보 A B C"
-
-# 명시 인자 (--order 텍스트 없이)
-python weekly_blog_bot.py --mode draft --parent-spec-id "콘텐츠 2" \
-    --axis 각도 --variants "증거 정리" "절차 흐름" "실패 사례"
-
 # dry-run / 모델 사전 검증
 python weekly_blog_bot.py --order "..." --dry-run
 python weekly_blog_bot.py --validate-models
@@ -163,6 +153,7 @@ python weekly_blog_bot.py --validate-models
 
 ## 후속 라운드 예정 항목
 
-- 부분 보정: 현재 spec 보정은 7건 전체를 재생성. draft 모드는 `minItems:1, maxItems:5`라 자연스럽게 부분 보정 가능. spec 측은 별도 schema 분기 필요.
+- **draft PASS 재도입**: 본 라운드에서 일단 들어냄. PASS 추상화가 `if pass_.name == 'X'` 분기로 누수되어 있었고, ctx의 의미·draft 디스크 의존이 명확하지 않았다. 다음 라운드에서 `flow.spec / flow.draft` 같이 책임이 분리된 구조로 다시 들어온다.
+- 부분 보정: 현재 spec 보정은 7건 전체를 재생성. partial/fail 항목만 재생성하도록 schema 분기 또는 draft 도입 시 함께 처리.
 - web search 인용 메타 보존: Responses API output annotations(URL/title)을 reviewer payload에 보존. 현재는 자유 텍스트만 사용.
 

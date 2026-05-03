@@ -58,9 +58,8 @@ class StageContext:
     md_path: Any = None
     calendar_event_id: Optional[str] = None
     notes: List[str] = field(default_factory=list)
-    pass_label: Optional[str] = None  # "spec" / "draft" — outputs 파일명 라벨
-    order: Any = None                 # weekly_blog_bot.pass_def.OrderSpec — None이면 spec 기본
-    parent_spec_item: Optional[Dict[str, Any]] = None  # draft 모드의 부모 spec 1건
+    pass_label: Optional[str] = None  # outputs 파일명 라벨 — 본 라운드는 'spec'만
+    order: Any = None                 # weekly_blog_bot.pass_def.OrderSpec
 
 
 # ---------- Result + abort 카테고리 (옛 result.py에서 흡수) ----------

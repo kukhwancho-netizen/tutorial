@@ -54,10 +54,8 @@ RULES: List[Tuple[Callable[[ItemDecisionInput], bool], str]] = [
 ]
 
 
-# PASS별 별칭. spec과 draft가 같은 규칙을 공유하지만, 향후 분기 가능성을 위해
-# 별도 이름으로 노출한다 (pass_def.BatchPass.decision_rules가 이걸 참조).
+# PASS별 별칭. 본 라운드는 spec PASS 1개만 — DRAFT_RULES는 다음 라운드에서.
 SPEC_RULES = RULES
-DRAFT_RULES = RULES
 
 
 def decide_final_status(input: ItemDecisionInput) -> str:

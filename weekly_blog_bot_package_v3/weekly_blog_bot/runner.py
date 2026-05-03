@@ -23,7 +23,7 @@ def run(config_path: pathlib.Path, *, dry_run: bool = False,
     )
 
     if ctx.dry_run:
-        ctx = stages.stage_dry_run(ctx, pass_=pass_)
+        ctx = stages.stage_dry_run(ctx)
     else:
         ctx = stages.stage_validate_models_if_required(ctx)
         client = make_client()

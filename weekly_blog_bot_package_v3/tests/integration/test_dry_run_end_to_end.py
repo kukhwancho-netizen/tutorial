@@ -37,29 +37,9 @@ def test_dry_run_uses_skipped_reviews(tmp_path, bot_module, cfg, root_path):
     assert all(item["final_status"] == "검수 생략(dry-run)" for item in data["report"]["items"])
 
 
-def test_dry_run_draft_mode(tmp_path, bot_module, cfg, root_path):
-    """draft + dry-run이 abort 없이 끝나고 _draft_ 라벨로 저장되는지 확인."""
+def test_draft_order_explicitly_rejected(bot_module):
+    """draft 형식 트리거는 본 라운드에서 명시적으로 거부된다."""
     bot = bot_module
-    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    for name in ("schemas", "prompts"):
-        (tmp_path / name).symlink_to(root_path / name, target_is_directory=True)
-
-    cfg["outputs"]["directory"] = "outputs"
-    cfg["calendar"]["enabled"] = False
-    cfg["outputs"]["create_calendar_event"] = False
-    cfg["notifications"]["enabled"] = False
-    cfg_path = tmp_path / "config" / "weekly_blog_bot.yaml"
-    cfg_path.write_text(__import__("yaml").safe_dump(cfg, allow_unicode=True), encoding="utf-8")
-
-    order = bot.parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
-    result = bot.run(cfg_path, dry_run=True, no_calendar=True, order=order)
-    assert result["run_status"] == "dry_run"
-    assert result["pass"] == "draft"
-    json_path = pathlib.Path(result["json_path"])
-    assert "_draft_" in json_path.name, f"draft dry-run filename should embed pass label: {json_path.name}"
-    data = bot.load_json(json_path)
-    # draft dry-run 샘플은 1 변주만 — items / reviews item_results 모두 1개여야 한다.
-    assert len(data["spec_batch"]["items"]) == 1
-    for review in data["reviews"].values():
-        assert len(review["item_results"]) == 1
-        assert review["item_results"][0]["temp_id"].startswith("콘텐츠 1.")
+    import pytest
+    with pytest.raises(bot.OrderParseError):
+        bot.parse_order("draft 콘텐츠 3 길이 풀+요약+핵심")
