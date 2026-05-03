@@ -30,8 +30,30 @@ def test_pass_for_unknown_mode_raises():
         pass_for(OrderSpec(mode="bogus", raw="x"))
 
 
-def test_pass_by_name_table_has_spec_and_draft():
-    assert set(pass_def.PASS_BY_NAME) == {"spec", "draft"}
+def test_pass_by_name_table_has_three_passes():
+    assert set(pass_def.PASS_BY_NAME) == {"spec", "draft", "edit"}
+
+
+def test_edit_pass_has_no_generation_but_has_review():
+    from weekly_blog_bot.pass_def import EDIT_PASS
+    assert EDIT_PASS.has_generation is False
+    assert EDIT_PASS.has_review is True
+    assert EDIT_PASS.generator_prompt_file is None
+    assert set(EDIT_PASS.reviewer_prompt_files) == {"R1", "R2", "R3"}
+
+
+def test_parse_order_edit_target_only():
+    o = parse_order("edit 콘텐츠 3.풀")
+    assert o.mode == "edit"
+    assert o.target_temp_id == "콘텐츠 3.풀"
+    assert o.source_file is None
+
+
+def test_parse_order_edit_with_source():
+    o = parse_order("edit 콘텐츠 5.A from outputs/foo.json")
+    assert o.mode == "edit"
+    assert o.target_temp_id == "콘텐츠 5.A"
+    assert o.source_file == "outputs/foo.json"
 
 
 def test_spec_pass_is_sketch_only():

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import sys
 import uuid
 from typing import Any, Dict, Optional
@@ -86,7 +87,58 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
     ctx.order = order
     if pass_.name == "draft" and order is not None and not dry_run:
         ctx.parent_spec_item = _load_parent_spec_item(paths.outputs, order.parent_spec_id)
+    if pass_.name == "edit" and order is not None and not dry_run:
+        ctx.spec = _load_draft_for_edit(paths.outputs, order.target_temp_id, order.source_file)
+        validate_json(ctx.spec_schema, ctx.spec, pass_.schema_name)
     return ctx
+
+
+def _load_draft_for_edit(outputs_dir, target_temp_id: Optional[str],
+                         source_file: Optional[str]) -> Dict[str, Any]:
+    """edit 명령용. target_temp_id를 포함한 draft batch를 찾아 spec(=batch)으로 둔다.
+
+    source_file이 지정되면 그 파일 우선. 없으면 outputs/의 가장 최근
+    *_draft_weekly_report.json 또는 *_edit_weekly_report.json 중에서 매칭되는
+    것을 찾는다.
+    """
+    from .domain import PipelineAbort
+    if not target_temp_id:
+        raise PipelineAbort("edit order missing target_temp_id", category="aborted")
+
+    if source_file:
+        path = pathlib.Path(source_file)
+        if not path.exists():
+            raise PipelineAbort(
+                f"edit source file not found: {source_file}",
+                category="aborted",
+                details={"target_temp_id": target_temp_id, "source_file": source_file},
+            )
+        candidates = [path]
+    else:
+        candidates = sorted(
+            list(outputs_dir.glob("*_draft_weekly_report.json"))
+            + list(outputs_dir.glob("*_edit_weekly_report.json")),
+            reverse=True,
+        )
+        if not candidates:
+            raise PipelineAbort(
+                f"edit needs a prior draft/edit output; none found in {outputs_dir}",
+                category="aborted",
+                details={"target_temp_id": target_temp_id, "outputs_dir": str(outputs_dir)},
+            )
+
+    for path in candidates:
+        data = load_json(path)
+        batch = data.get("spec_batch") or {}
+        for item in batch.get("items", []):
+            if item.get("temp_id") == target_temp_id:
+                return batch
+    raise PipelineAbort(
+        f"target_temp_id {target_temp_id!r} not found in any candidate output",
+        category="aborted",
+        details={"target_temp_id": target_temp_id,
+                 "scanned": [str(c) for c in candidates[:5]]},
+    )
 
 
 def _load_parent_spec_item(outputs_dir, parent_spec_id: Optional[str]) -> Dict[str, Any]:
@@ -121,8 +173,11 @@ def _load_parent_spec_item(outputs_dir, parent_spec_id: Optional[str]) -> Dict[s
 # ---------- 단계 2: dry-run vs live ----------
 
 def stage_dry_run(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
-    """dry-run 분기: pass_별 샘플 batch + (검수 PASS만) 더미 reviews."""
-    if pass_.name == "draft":
+    """dry-run 분기: pass_별 샘플 batch + (검수 PASS만) 더미 reviews.
+
+    edit는 draft 샘플을 재사용한다 — 의미상 사용자 편집된 draft를 시뮬레이션.
+    """
+    if pass_.name in ("draft", "edit"):
         ctx.spec = make_dry_run_draft(ctx.config, ctx.basis)
     else:
         ctx.spec = make_dry_run_spec(ctx.config, ctx.basis)

@@ -18,20 +18,19 @@ from . import decision
 
 @dataclass(frozen=True)
 class BatchPass:
-    name: str                              # "spec"
-    schema_name: str                       # "WeeklySpecBatch"
-    schema_file: str                       # schemas/ 하위 파일명
-    generator_prompt_file: str             # prompts/ 하위
-    # reviewer/repair는 검수가 있는 PASS만 채운다. spec sketch는 빈 dict / None.
+    name: str                              # "spec" | "draft" | "edit"
+    schema_name: str
+    schema_file: str
+    generator_prompt_file: Optional[str]   # edit는 generation 없음
     reviewer_prompt_files: Dict[str, str]
     repair_prompt_file: Optional[str]
     decision_rules: List[Tuple[Callable, str]]
     use_web_search: bool
     output_label: str
-    # report/persist 관련
-    report_schema_file: str                # schemas/ 하위 (sketch_report or final_report)
-    has_review: bool                       # 검수 단계 활성화 여부
-    has_calendar_write: bool               # spec sketch는 캘린더 미기록
+    report_schema_file: str
+    has_generation: bool                   # edit는 False
+    has_review: bool
+    has_calendar_write: bool
 
 
 SPEC_PASS = BatchPass(
@@ -45,6 +44,7 @@ SPEC_PASS = BatchPass(
     use_web_search=True,
     output_label="spec",
     report_schema_file="sketch_report.schema.json",
+    has_generation=True,
     has_review=False,
     has_calendar_write=False,
 )
@@ -64,18 +64,43 @@ DRAFT_PASS = BatchPass(
     use_web_search=True,
     output_label="draft",
     report_schema_file="final_report.schema.json",
+    has_generation=True,
     has_review=True,
     has_calendar_write=True,
 )
 
-PASS_BY_NAME: Dict[str, BatchPass] = {SPEC_PASS.name: SPEC_PASS, DRAFT_PASS.name: DRAFT_PASS}
+EDIT_PASS = BatchPass(
+    name="edit",
+    schema_name="WeeklyDraftBatch",
+    schema_file="draft_batch.schema.json",
+    generator_prompt_file=None,            # 사용자 편집을 그대로 받음 — 생성 없음
+    reviewer_prompt_files={
+        "R1": "23_reviewer_r1_draft.md",
+        "R2": "24_reviewer_r2_draft.md",
+        "R3": "25_reviewer_r3_draft.md",
+    },
+    repair_prompt_file="31_repair_draft_system.md",
+    decision_rules=decision.SPEC_RULES,
+    use_web_search=True,                   # R2 인용 검증
+    output_label="edit",
+    report_schema_file="final_report.schema.json",
+    has_generation=False,
+    has_review=True,
+    has_calendar_write=True,
+)
+
+PASS_BY_NAME: Dict[str, BatchPass] = {
+    SPEC_PASS.name: SPEC_PASS,
+    DRAFT_PASS.name: DRAFT_PASS,
+    EDIT_PASS.name: EDIT_PASS,
+}
 
 
 @dataclass(frozen=True)
 class OrderSpec:
-    """명령 1건. spec 또는 draft."""
+    """명령 1건. spec / draft / edit."""
 
-    mode: str                               # "spec" | "draft"
+    mode: str                               # "spec" | "draft" | "edit"
     raw: str
     # spec
     channel: Optional[str] = None
@@ -85,6 +110,9 @@ class OrderSpec:
     parent_spec_id: Optional[str] = None    # "콘텐츠 3"
     axis: Optional[str] = None              # "각도" | "길이" | "후보" | "버전"
     variants: Tuple[str, ...] = ()
+    # edit
+    target_temp_id: Optional[str] = None    # "콘텐츠 3.풀" — 단일 변주
+    source_file: Optional[str] = None       # 명시 입력 파일 (없으면 최신 자동 탐색)
 
 
 def pass_for(order: OrderSpec) -> BatchPass:
@@ -114,11 +142,25 @@ _DRAFT_TRIGGER_RE = re.compile(
     r"(?P<axis>각도|길이|후보|버전)\s+(?P<variants>.+?)\s*$",
 )
 
+# edit 콘텐츠 3.풀 [from path/to/draft.json]
+_EDIT_TRIGGER_RE = re.compile(
+    r"^\s*edit\s+(?P<target>콘텐츠\s*[1-9][0-9]?\.[A-Za-z0-9가-힣]+)"
+    r"(?:\s+from\s+(?P<src>\S.+?))?\s*$",
+)
+
 
 def parse_order(text: str) -> OrderSpec:
     raw = (text or "").strip()
     if not raw:
         raise OrderParseError("empty order")
+    m = _EDIT_TRIGGER_RE.match(raw)
+    if m:
+        target = re.sub(r"\s+", " ", m.group("target")).strip()
+        return OrderSpec(
+            mode="edit", raw=raw,
+            target_temp_id=target,
+            source_file=m.group("src"),
+        )
     m = _DRAFT_TRIGGER_RE.match(raw)
     if m:
         parent = re.sub(r"\s+", " ", m.group("parent")).strip()

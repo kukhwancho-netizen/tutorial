@@ -57,6 +57,7 @@ from .domain import (  # noqa: F401
 )
 from .pass_def import (  # noqa: F401
     DRAFT_PASS,
+    EDIT_PASS,
     PASS_BY_NAME,
     SPEC_PASS,
     BatchPass,

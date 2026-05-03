@@ -26,10 +26,15 @@ def run(config_path: pathlib.Path, *, dry_run: bool = False,
     if ctx.dry_run:
         ctx = stages.stage_dry_run(ctx, pass_=pass_)
     else:
-        ctx = stages.stage_validate_models_if_required(ctx)
-        client = make_client()
-        ctx = stages.stage_fetch_calendar(ctx)
-        ctx = stages.stage_generate(ctx, client=client, pass_=pass_)
+        client = None
+        if pass_.has_review or pass_.has_generation:
+            ctx = stages.stage_validate_models_if_required(ctx)
+            client = make_client()
+        if pass_.name in ("spec", "draft"):
+            ctx = stages.stage_fetch_calendar(ctx)
+        if pass_.has_generation:
+            ctx = stages.stage_generate(ctx, client=client, pass_=pass_)
+        # edit 모드: stage_prepare가 이미 ctx.spec을 디스크에서 로드해 둠
         if pass_.has_review:
             ctx = stages.stage_review(ctx, client=client, pass_=pass_)
             ctx = stages.stage_repair_if_needed(ctx, client=client, pass_=pass_)
