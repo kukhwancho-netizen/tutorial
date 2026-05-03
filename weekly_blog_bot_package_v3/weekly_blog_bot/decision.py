@@ -54,8 +54,8 @@ RULES: List[Tuple[Callable[[ItemDecisionInput], bool], str]] = [
 ]
 
 
-# PASS별 별칭. 본 라운드는 spec PASS 1개만 — DRAFT_RULES는 다음 라운드에서.
-SPEC_RULES = RULES
+# 모든 PASS가 같은 의사결정 표를 공유. PASS별로 분기되어야 한다면 새 상수를
+# 추가하고 BatchPass.decision_rules가 골라 잡는다 — 현재는 RULES 1개로 충분.
 
 
 def decide_final_status(input: ItemDecisionInput) -> str:

@@ -79,8 +79,8 @@ def stage_prepare(config_path, *, dry_run: bool, no_calendar: bool,
 # ---------- 단계 2: dry-run vs live ----------
 
 def stage_dry_run(ctx: StageContext, *, pass_: BatchPass = SPEC_PASS) -> StageContext:
-    """dry-run 분기: PASS의 dry_run_factory로 샘플 생성. 검수 PASS면 더미 reviews."""
-    ctx.batch = pass_.dry_run_factory(ctx.config, ctx.basis)
+    """dry-run 분기: PASS의 dry_run_factory(config, basis, order)로 샘플 생성."""
+    ctx.batch = pass_.dry_run_factory(ctx.config, ctx.basis, ctx.order)
     validate_json(ctx.batch_schema, ctx.batch, pass_.schema_name)
     if pass_.has_review:
         ctx.reviews = {r: make_dry_run_review(r, ctx.batch) for r in REVIEWERS}

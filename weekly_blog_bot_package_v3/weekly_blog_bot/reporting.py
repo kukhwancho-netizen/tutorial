@@ -196,8 +196,17 @@ def build_sketch_report_from_data(
     usage_by_model: Optional[Dict[str, Dict[str, int]]] = None,
     dry_run: bool = False,
     config: Dict[str, Any],
+    # 호환성: BatchPass.report_builder 시그니처와 같은 키워드를 받되,
+    # sketch 모드에는 무의미하므로 무시한다.
+    reviews: Optional[Dict[str, Dict[str, Any]]] = None,
+    repair_attempted: bool = False,
 ) -> Dict[str, Any]:
-    """검수 없이 spec sketch만 묶는다. summary는 sketches/high_risk_hint만."""
+    """검수 없이 spec sketch만 묶는다. summary는 sketches/high_risk_hint만.
+
+    reviews/repair_attempted 인자는 BatchPass.report_builder 통일 인터페이스용 —
+    sketch 단계에는 의미 없음.
+    """
+    del reviews, repair_attempted  # explicit ignore
     items_out = [
         {
             "temp_id": it["temp_id"],
@@ -242,7 +251,10 @@ def build_sketch_report_from_data(
     }
 
 
-def render_sketch_report_markdown(report: Dict[str, Any]) -> str:
+def render_sketch_report_markdown(report: Dict[str, Any],
+                                   reviews: Optional[Dict[str, Any]] = None) -> str:
+    """sketch 리포트 마크다운. reviews는 BatchPass.markdown_renderer 통일 인터페이스용 — 무시."""
+    del reviews
     summary = report["summary"]
     usage = report.get("usage", {})
     lines = [

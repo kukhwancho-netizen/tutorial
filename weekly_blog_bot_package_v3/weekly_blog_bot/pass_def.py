@@ -25,7 +25,29 @@ from . import reporting
 
 @dataclass(frozen=True)
 class BatchPass:
-    """한 PASS의 정적 정체성. capability flags + 단계별 콜백."""
+    """한 PASS의 정적 정체성. capability flags + 단계별 콜백.
+
+    새 PASS 추가 시 손대야 할 곳 (hidden coupling 주의):
+    1. BatchPass 인스턴스 등록 + PASS_BY_NAME에 추가.
+    2. OrderSpec에 mode-별 필드 추가 (필요시).
+    3. parse_order에 mode-별 정규식·디스패치 추가.
+    4. OrderSpec.to_payload_dict에 mode-별 분기 추가.
+    5. dry_run_factory / prepare_hook / report_builder / markdown_renderer /
+       summary_formatter 함수 작성 (필요한 것만).
+
+    PASS-별 계약:
+    - prepare_hook: stage_prepare에서 live(not dry_run) 진입 시 호출. ctx를
+      변형한다. has_generation=False인 PASS는 prepare_hook이 ctx.batch를
+      직접 set해서 generator를 대체하는 의미를 갖는다 (EDIT_PASS의 경우).
+      ctx.batch가 set되면 stage_prepare가 즉시 schema 검증한다.
+    - dry_run_factory: (config, basis, order) → batch dict. order를 반영해
+      샘플 모양을 결정한다 (None이면 PASS 기본).
+    - report_builder: (run_id, batch, reviews, repair_attempted,
+      usage_by_model, dry_run, config) → report dict. 통일 키워드. sketch
+      builder는 reviews/repair_attempted를 무시한다.
+    - markdown_renderer: (report, reviews) → str. sketch는 reviews 무시.
+    - summary_formatter: report.summary dict → 알림 본문 한 줄.
+    """
 
     name: str
     schema_name: str
@@ -42,12 +64,12 @@ class BatchPass:
     has_review: bool
     has_calendar_write: bool
     fetches_calendar: bool
-    # 단계 콜백
-    prepare_hook: Optional[Callable[[Any], None]]                  # ctx 변형 (draft: parent 로드, edit: batch 로드)
-    dry_run_factory: Callable[[Dict[str, Any], dt.datetime], Dict[str, Any]]
-    report_builder: Callable[..., Dict[str, Any]]                  # (run_id, batch, reviews, repair_attempted, usage_by_model, dry_run, config) → report
-    markdown_renderer: Callable[[Dict[str, Any], Dict[str, Any]], str]  # (report, reviews) → markdown
-    summary_formatter: Callable[[Dict[str, Any]], str]             # summary dict → notification body 한 줄
+    # 단계 콜백 (위 docstring의 계약 참조)
+    prepare_hook: Optional[Callable[[Any], None]]
+    dry_run_factory: Callable[[Dict[str, Any], dt.datetime, Optional[Any]], Dict[str, Any]]
+    report_builder: Callable[..., Dict[str, Any]]
+    markdown_renderer: Callable[[Dict[str, Any], Optional[Dict[str, Any]]], str]
+    summary_formatter: Callable[[Dict[str, Any]], str]
 
 
 # ---------- prepare_hook 구현 (PASS-별 디스크 로딩) ----------
@@ -156,7 +178,7 @@ SPEC_PASS = BatchPass(
     generator_prompt_file="10_generator_system.md",
     reviewer_prompt_files={},
     repair_prompt_file=None,
-    decision_rules=decision.SPEC_RULES,
+    decision_rules=decision.RULES,
     use_web_search=True,
     output_label="spec",
     report_schema_file="sketch_report.schema.json",
@@ -166,13 +188,8 @@ SPEC_PASS = BatchPass(
     fetches_calendar=True,
     prepare_hook=None,
     dry_run_factory=dry_run_mod.make_dry_run_spec,
-    report_builder=lambda *, run_id, batch, reviews, repair_attempted,
-                          usage_by_model, dry_run, config:
-        reporting.build_sketch_report_from_data(
-            run_id=run_id, batch=batch, usage_by_model=usage_by_model,
-            dry_run=dry_run, config=config,
-        ),
-    markdown_renderer=lambda report, reviews: reporting.render_sketch_report_markdown(report),
+    report_builder=reporting.build_sketch_report_from_data,
+    markdown_renderer=reporting.render_sketch_report_markdown,
     summary_formatter=_spec_summary_format,
 )
 
@@ -187,7 +204,7 @@ DRAFT_PASS = BatchPass(
         "R3": "25_reviewer_r3_draft.md",
     },
     repair_prompt_file="31_repair_draft_system.md",
-    decision_rules=decision.SPEC_RULES,
+    decision_rules=decision.RULES,
     use_web_search=True,
     output_label="draft",
     report_schema_file="final_report.schema.json",
@@ -213,7 +230,7 @@ EDIT_PASS = BatchPass(
         "R3": "25_reviewer_r3_draft.md",
     },
     repair_prompt_file="31_repair_draft_system.md",
-    decision_rules=decision.SPEC_RULES,
+    decision_rules=decision.RULES,
     use_web_search=True,
     output_label="edit",
     report_schema_file="final_report.schema.json",
