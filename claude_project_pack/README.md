@@ -19,16 +19,26 @@ OpenAI 파이프라인(`weekly_blog_bot_package_v3/`)을 Claude Project로 옮�
 
 ## 셋업 (5분)
 
-1. [claude.ai](https://claude.ai) → **Projects** → **New project** → 이름 임의 (예: "조국환 변호사 주간봇").
-2. Project 생성 후 **"Set custom instructions"** 클릭.
-3. `PROJECT_INSTRUCTIONS.md`의 내용을 통째로 붙여넣고 저장.
-4. **"Add knowledge"** 클릭 → `KNOWLEDGE_MANIFEST.md`의 Tier 1 13개 파일 업로드.
-5. 여유 있으면 Tier 2도 업로드.
-6. 첫 시운전:
-   ```
-   블 (민+가+행) 7 ㄱㄱ
-   ```
-   → spec sketch JSON 7건이 나오면 OK.
+### 빠른 길 — 번들 스크립트 사용
+
+```bash
+bash claude_project_pack/bundle.sh
+# → /tmp/claude_project_knowledge.zip 생성 (Tier 1+2, 84KB)
+
+unzip /tmp/claude_project_knowledge.zip -d ~/claude_project_bundle
+```
+
+이후:
+1. [claude.ai](https://claude.ai) → **Projects** → **New project** → 이름 임의 (예: "조국환 변호사 주간봇")
+2. **"Set custom instructions"** 클릭 → `~/claude_project_bundle/PROJECT_INSTRUCTIONS.md` 내용 통째로 붙여넣고 저장
+3. **"Add knowledge"** 클릭 → `~/claude_project_bundle/knowledge/` 안의 24개 파일을 일괄 드래그
+4. 첫 시운전: `블 (민+가+행) 7 ㄱㄱ` → spec sketch JSON 7건이 나오면 OK
+
+판례 DB(1.5MB)도 함께 올리려면: `bash claude_project_pack/bundle.sh full`
+
+### 수동 길 — 매니페스트 따라 개별 업로드
+
+`KNOWLEDGE_MANIFEST.md` 참조. 파일별로 저장소에서 찾아 업로드. (번들 스크립트가 안 돌면 사용)
 
 ## 사용 패턴
 
@@ -62,7 +72,9 @@ Claude가 R1/R2/R3 다시. 필요 시 자동 보정 1회.
 claude_project_pack/
 ├── README.md                    # 본 문서
 ├── PROJECT_INSTRUCTIONS.md      # Project Instructions에 붙여넣을 마스터 디스패처
-└── KNOWLEDGE_MANIFEST.md        # Knowledge에 업로드할 파일 목록 (저장소 경로 기준)
+├── KNOWLEDGE_MANIFEST.md        # Knowledge에 업로드할 파일 목록 (저장소 경로 기준)
+├── EXAMPLE_TRANSCRIPT.md        # 첫 사이클 입출력 예시 (검증용 비교 기준)
+└── bundle.sh                    # Knowledge 파일을 zip으로 묶어주는 스크립트
 ```
 
 업로드 대상 파일은 모두 저장소 안에 이미 존재. 본 pack은 메타데이터·가이드만.
