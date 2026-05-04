@@ -21,6 +21,7 @@ OpenAI 파이프라인(`weekly_blog_bot_package_v3/`)을 Claude Project로 옮�
 
 ### 빠른 길 — 번들 스크립트 사용
 
+**macOS / Linux** (또는 Windows의 Git Bash):
 ```bash
 bash claude_project_pack/bundle.sh
 # → /tmp/claude_project_knowledge.zip 생성 (Tier 1+2, 84KB)
@@ -28,13 +29,23 @@ bash claude_project_pack/bundle.sh
 unzip /tmp/claude_project_knowledge.zip -d ~/claude_project_bundle
 ```
 
-이후:
+**Windows PowerShell**:
+```powershell
+.\claude_project_pack\bundle.ps1
+# → $env:TEMP\claude_project_knowledge.zip 생성
+
+Expand-Archive "$env:TEMP\claude_project_knowledge.zip" -DestinationPath "$HOME\claude_project_bundle"
+```
+
+이후 (운영체제 무관):
 1. [claude.ai](https://claude.ai) → **Projects** → **New project** → 이름 임의 (예: "조국환 변호사 주간봇")
-2. **"Set custom instructions"** 클릭 → `~/claude_project_bundle/PROJECT_INSTRUCTIONS.md` 내용 통째로 붙여넣고 저장
-3. **"Add knowledge"** 클릭 → `~/claude_project_bundle/knowledge/` 안의 24개 파일을 일괄 드래그
+2. **"Set custom instructions"** 클릭 → 번들에서 푼 `PROJECT_INSTRUCTIONS.md` 내용 통째로 붙여넣고 저장
+3. **"Add knowledge"** 클릭 → `knowledge/` 폴더 안의 24개 파일을 일괄 드래그
 4. 첫 시운전: `블 (민+가+행) 7 ㄱㄱ` → spec sketch JSON 7건이 나오면 OK
 
-판례 DB(1.5MB)도 함께 올리려면: `bash claude_project_pack/bundle.sh full`
+판례 DB(1.5MB)도 함께 올리려면:
+- bash: `bash claude_project_pack/bundle.sh full`
+- PowerShell: `.\claude_project_pack\bundle.ps1 -Mode full`
 
 ### 수동 길 — 매니페스트 따라 개별 업로드
 
