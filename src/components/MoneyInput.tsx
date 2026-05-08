@@ -1,5 +1,7 @@
 "use client";
 
+import { fmt as _fmt } from "@/lib/format";
+
 type Props = {
   label: string;
   value: number;
@@ -27,6 +29,5 @@ export function MoneyInput({ label, value, onChange, hint, min = 0 }: Props) {
   );
 }
 
-export function fmt(n: number): string {
-  return n.toLocaleString("ko-KR") + "원";
-}
+// 호환을 위해 re-export (계산기 페이지들이 여기서 import 중)
+export const fmt = _fmt;

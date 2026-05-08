@@ -3,8 +3,9 @@
 // - 부가세 신고용 매출/매입 집계
 // - 표준 매출/매입 분개 자동 생성
 
-import type { TxnDirection } from "@prisma/client";
 import { db } from "@/lib/db";
+
+export type TxnDirection = "SALE" | "PURCHASE";
 
 export type JournalLineInput = {
   accountId: string;

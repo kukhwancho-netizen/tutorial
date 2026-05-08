@@ -82,7 +82,11 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(Math.max(v, min), max);
 }
 
-/** 4대보험은 통상 10원 단위 절사 */
+/**
+ * 4대보험은 10원 단위 절사. 단, IEEE 754 부동소수 오차로
+ * 3,000,000 × 0.009 = 26999.9999... 가 되어 절사 시 26,990 으로 떨어지는
+ * 문제가 있어 round로 정수화 후 절사한다 (실무 공단 계산과 일치).
+ */
 function floor10(v: number) {
-  return Math.floor(v / 10) * 10;
+  return Math.floor(Math.round(v) / 10) * 10;
 }

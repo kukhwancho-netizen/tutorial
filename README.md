@@ -59,8 +59,14 @@ npm install
 npm run db:push       # Prisma SQLite 스키마 적용
 npm run db:seed       # 데모 데이터 삽입
 npm run dev           # http://localhost:3000
-npm test              # 세액 계산 단위 테스트
+npm test              # 세액 계산 단위/통합 테스트 (25개)
+npm run demo          # 권한 가드 + 복식부기 + VAT 집계 시나리오 출력
+npm run typecheck     # 타입 검사
 ```
+
+데모 계정: `accountant@example.com` (세무사) / `owner@sample.co.kr` (고객사)
+
+`scripts/live-demo.sh` — dev 서버에 대해 세션 쿠키를 발급하고 `/clients/[id]` 라우트의 권한 가드를 curl로 검증.
 
 ## 다음 단계
 

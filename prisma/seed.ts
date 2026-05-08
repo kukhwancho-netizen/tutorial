@@ -1,6 +1,8 @@
-import { PrismaClient, AccountType } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
+
+type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE";
 
 // 한국 기업회계기준 기본 계정과목 시드 (요약본)
 const DEFAULT_ACCOUNTS: Array<{ code: string; name: string; type: AccountType }> = [

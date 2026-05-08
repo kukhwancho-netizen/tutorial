@@ -1,14 +1,31 @@
+import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { requireClientAccess } from "@/lib/auth/guard";
+import { AuthError, requireClientAccess } from "@/lib/auth/guard";
 import { aggregateVat } from "@/lib/accounting/journal";
-import { fmt } from "@/components/MoneyInput";
+import { fmt } from "@/lib/format";
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
-  const { client } = await requireClientAccess(params.id);
+export default async function ClientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { year?: string };
+}) {
+  let client;
+  try {
+    ({ client } = await requireClientAccess(params.id));
+  } catch (e) {
+    if (e instanceof AuthError) {
+      if (e.status === 401) redirect("/login");
+      // 403/404는 둘 다 notFound로 — 보안상 "존재하지만 권한없음"을 노출하지 않는다.
+      notFound();
+    }
+    throw e;
+  }
 
-  const now = new Date();
-  const yearStart = new Date(now.getFullYear(), 0, 1);
-  const yearEnd = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+  const year = Number(searchParams?.year) || new Date().getFullYear();
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59);
   const vat = await aggregateVat({ clientId: client.id, from: yearStart, to: yearEnd });
 
   const recentEntries = await db.journalEntry.findMany({
@@ -28,7 +45,24 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
       </header>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700">올해 부가세 집계</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">{year}년 부가세 집계</h2>
+          <div className="flex gap-1 text-xs">
+            {[year - 1, year, year + 1].map((y) => (
+              <a
+                key={y}
+                href={`?year=${y}`}
+                className={
+                  y === year
+                    ? "rounded bg-brand-50 px-2 py-1 font-semibold text-brand-700"
+                    : "rounded px-2 py-1 text-slate-500 hover:bg-slate-100"
+                }
+              >
+                {y}
+              </a>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
           <Stat label="매출 공급가액" value={vat.salesSupply} />
           <Stat label="매출세액" value={vat.salesVat} />

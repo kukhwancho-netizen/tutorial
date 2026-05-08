@@ -14,6 +14,9 @@ export async function loginAction(_prev: unknown, formData: FormData) {
   });
   if (!user) return { error: "등록되지 않은 사용자입니다. (시드 데이터 사용)" };
 
+  if (user.role !== "ACCOUNTANT" && user.role !== "CLIENT") {
+    return { error: "사용자 역할이 잘못되어 있습니다." };
+  }
   writeSession({
     userId: user.id,
     email: user.email,
@@ -29,25 +32,27 @@ export async function logoutAction() {
   redirect("/login");
 }
 
-export async function switchClientAction(formData: FormData) {
+export async function switchClientAction(formData: FormData): Promise<void> {
   const session = readSession();
-  if (!session) redirect("/login");
+  if (!session) {
+    redirect("/login");
+  }
 
   const clientId = String(formData.get("clientId") ?? "");
   const client = await db.client.findUnique({ where: { id: clientId } });
-  if (!client) return { error: "고객사를 찾을 수 없습니다." };
+  // 권한 위반은 silent — 폼은 select로 본인이 접근 가능한 옵션만 노출되므로
+  // 여기 도달하는 위반 시도는 클라이언트 사이드 조작이고, 응답하지 않는 게 맞다.
+  if (!client) return;
 
-  if (session!.role === "ACCOUNTANT") {
-    if (session!.firmId !== client.firmId) {
-      return { error: "다른 사무소의 고객사로는 전환할 수 없습니다." };
-    }
+  if (session.role === "ACCOUNTANT") {
+    if (session.firmId !== client.firmId) return;
   } else {
     const m = await db.membership.findUnique({
-      where: { userId_clientId: { userId: session!.userId, clientId } },
+      where: { userId_clientId: { userId: session.userId, clientId } },
     });
-    if (!m) return { error: "접근 권한이 없습니다." };
+    if (!m) return;
   }
 
-  writeSession({ ...session!, activeClientId: clientId });
+  writeSession({ ...session, activeClientId: clientId });
   redirect("/");
 }

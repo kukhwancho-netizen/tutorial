@@ -1,11 +1,6 @@
 // 세무기장대리 서비스 - 멀티테넌트 데이터 모델
-// 테넌트 = 세무사 사무소(Firm)
-// 세무사 사무소는 다수의 고객사(Client)를 관리하고,
-// 각 고객사는 자체 사용자(고객사 담당자)를 가진다.
-//
-// 회계: 복식부기 (JournalEntry 헤더 + JournalLine N개)
-// 부가세 신고용 메타데이터(공급가액/부가세/매출·매입 구분)는 헤더에 함께 보관해
-// VAT 집계 시 라인 합산 없이도 빠르게 신고서를 만들 수 있도록 한다.
+// SQLite는 Prisma enum 미지원이라 String + 애플리케이션 레벨 union 타입을 사용한다.
+// PostgreSQL 마이그레이션 시 enum으로 복원할 것.
 
 generator client {
   provider = "prisma-client-js"
@@ -16,30 +11,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  ACCOUNTANT
-  CLIENT
-}
-
-enum BizType {
-  CORPORATION
-  SOLE_GENERAL
-  SOLE_SIMPLIFIED
-  SOLE_TAX_FREE
-}
-
-enum TxnDirection {
-  SALE
-  PURCHASE
-}
-
-enum AccountType {
-  ASSET
-  LIABILITY
-  EQUITY
-  REVENUE
-  EXPENSE
-}
+// String 컬럼에 들어가는 union 값 (애플리케이션 레벨에서 강제):
+//   UserRole:     "ACCOUNTANT" | "CLIENT"
+//   BizType:      "CORPORATION" | "SOLE_GENERAL" | "SOLE_SIMPLIFIED" | "SOLE_TAX_FREE"
+//   TxnDirection: "SALE" | "PURCHASE"
+//   AccountType:  "ASSET" | "LIABILITY" | "EQUITY" | "REVENUE" | "EXPENSE"
 
 model Firm {
   id        String   @id @default(cuid())
@@ -57,7 +33,7 @@ model Client {
   name      String
   bizNo     String
   ownerName String?
-  bizType   BizType  @default(SOLE_GENERAL)
+  bizType   String   @default("SOLE_GENERAL")
   industry  String?
   openedAt  DateTime?
   createdAt DateTime @default(now())
@@ -76,7 +52,7 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
-  role         UserRole
+  role         String
   firmId       String?
   passwordHash String?
   createdAt    DateTime @default(now())
@@ -98,14 +74,12 @@ model Membership {
   @@index([clientId])
 }
 
-// ── 회계 (복식부기) ──────────────────────────────────────────
-
 model Account {
-  id       String      @id @default(cuid())
+  id       String @id @default(cuid())
   clientId String
-  code     String      // 계정과목 코드 (401, 146, 255 등)
-  name     String      // 매출, 매출채권, 부가세예수금 등
-  type     AccountType
+  code     String
+  name     String
+  type     String
 
   client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   lines  JournalLine[]
@@ -114,20 +88,18 @@ model Account {
   @@index([clientId])
 }
 
-// 분개 헤더: 한 거래(전표) 단위
 model JournalEntry {
-  id           String        @id @default(cuid())
+  id           String   @id @default(cuid())
   clientId     String
   occurredOn   DateTime
   description  String?
   counterparty String?
-  // 부가세 신고 보조 메타 (VAT 신고서 합계표 빠른 집계용)
-  vatDirection TxnDirection? // null이면 부가세 미관련 분개
-  supplyAmount Int           @default(0)
-  vatAmount    Int           @default(0)
-  totalAmount  Int           @default(0)
-  isTaxInvoice Boolean       @default(false)
-  createdAt    DateTime      @default(now())
+  vatDirection String?  // "SALE" | "PURCHASE" | null
+  supplyAmount Int      @default(0)
+  vatAmount    Int      @default(0)
+  totalAmount  Int      @default(0)
+  isTaxInvoice Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   lines  JournalLine[]
@@ -136,23 +108,20 @@ model JournalEntry {
   @@index([clientId, vatDirection])
 }
 
-// 분개 라인: 차변/대변 합이 일치해야 한다 (애플리케이션 레벨에서 검증)
 model JournalLine {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   entryId   String
   accountId String
-  debit     Int    @default(0)
-  credit    Int    @default(0)
+  debit     Int     @default(0)
+  credit    Int     @default(0)
   memo      String?
 
   entry   JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  account Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  account Account      @relation(fields: [accountId], references: [id])
 
   @@index([entryId])
   @@index([accountId])
 }
-
-// ── 급여 ────────────────────────────────────────────────────
 
 model PayrollEntry {
   id              String   @id @default(cuid())
