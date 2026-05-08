@@ -1,0 +1,129 @@
+// 세무기장대리 서비스 - 멀티테넌트 데이터 모델
+// 테넌트 = 세무사 사무소(Firm)
+// 세무사 사무소는 다수의 고객사(Client)를 관리하고,
+// 각 고객사는 자체 사용자(고객사 담당자)를 가진다.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ACCOUNTANT  // 세무사 사무소 소속(세무사/직원)
+  CLIENT      // 고객사 담당자
+}
+
+enum BizType {
+  CORPORATION       // 법인사업자
+  SOLE_GENERAL      // 개인 일반과세자
+  SOLE_SIMPLIFIED   // 개인 간이과세자
+  SOLE_TAX_FREE     // 면세사업자
+}
+
+enum TxnDirection {
+  SALE       // 매출
+  PURCHASE   // 매입
+}
+
+model Firm {
+  id        String   @id @default(cuid())
+  name      String
+  bizNo     String?  // 세무사 사무소 사업자등록번호
+  createdAt DateTime @default(now())
+
+  users   User[]
+  clients Client[]
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  firmId      String
+  name        String
+  bizNo       String   // 사업자등록번호
+  ownerName   String?  // 대표자
+  bizType     BizType  @default(SOLE_GENERAL)
+  industry    String?  // 업종 (예: 도소매, 음식업)
+  openedAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  firm         Firm          @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  memberships  Membership[]
+  transactions Transaction[]
+  payrolls     PayrollEntry[]
+
+  @@unique([firmId, bizNo])
+  @@index([firmId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  role         UserRole
+  firmId       String?  // ACCOUNTANT인 경우 소속 사무소
+  passwordHash String?  // 데모: 실제로는 외부 IdP/Argon2 권장
+  createdAt    DateTime @default(now())
+
+  firm        Firm?        @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  memberships Membership[]
+}
+
+// 고객사 사용자(또는 고객사를 담당하는 세무사)에 대한 접근 권한
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String
+  clientId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([clientId])
+}
+
+// 전표(매입/매출). 부가세 신고서 집계 기준 데이터
+model Transaction {
+  id            String        @id @default(cuid())
+  clientId      String
+  occurredOn    DateTime      // 거래일자
+  direction     TxnDirection  // 매출/매입
+  counterparty  String        // 거래처명
+  description   String?
+  supplyAmount  Int           // 공급가액 (원, 정수 보관)
+  vatAmount     Int           // 부가세
+  totalAmount   Int           // 합계
+  isTaxInvoice  Boolean       @default(true) // 세금계산서 여부
+  createdAt     DateTime      @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, occurredOn])
+}
+
+// 급여 원천세/4대보험 산출용
+model PayrollEntry {
+  id              String   @id @default(cuid())
+  clientId        String
+  payDate         DateTime
+  employeeName    String
+  dependents      Int      @default(1) // 본인 포함 부양가족 수 (간이세액표용)
+  childrenUnder20 Int      @default(0)
+  grossPay        Int      // 비과세 제외 총급여
+  nonTaxablePay   Int      @default(0) // 비과세 (식대 등)
+  incomeTax       Int      @default(0) // 소득세
+  localIncomeTax  Int      @default(0) // 지방소득세
+  nationalPension Int      @default(0)
+  healthIns       Int      @default(0)
+  longTermCare    Int      @default(0)
+  employmentIns   Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, payDate])
+}
