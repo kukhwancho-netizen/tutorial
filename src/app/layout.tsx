@@ -17,7 +17,7 @@ const NAV = [
   { href: "/calculators/insurance", label: "4대보험" },
 ];
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko">
       <body>

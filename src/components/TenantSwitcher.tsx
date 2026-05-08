@@ -1,40 +1,37 @@
-"use client";
+// 서버 컴포넌트 — 세션을 직접 읽고 접근 가능한 고객사만 노출.
+import { listAccessibleClients } from "@/lib/auth/guard";
+import { readSession } from "@/lib/auth/session";
+import { switchClientAction, logoutAction } from "@/app/login/actions";
+import { ClientSelect } from "./ClientSelect";
 
-import { useEffect, useState } from "react";
-import { getActiveTenant, setActiveTenant, type Tenant, listTenants } from "@/lib/tenant/client";
+export async function TenantSwitcher() {
+  const session = readSession();
+  if (!session) {
+    return (
+      <a href="/login" className="text-sm text-brand-600 hover:underline">
+        로그인
+      </a>
+    );
+  }
 
-export function TenantSwitcher() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [active, setActive] = useState<Tenant | null>(null);
-
-  useEffect(() => {
-    setTenants(listTenants());
-    setActive(getActiveTenant());
-  }, []);
-
-  if (!active) return null;
+  const clients = await listAccessibleClients();
 
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-slate-500">현재:</span>
-      <select
-        value={active.id}
-        onChange={(e) => {
-          const next = tenants.find((t) => t.id === e.target.value);
-          if (next) {
-            setActiveTenant(next);
-            setActive(next);
-            window.location.reload();
-          }
-        }}
-        className="rounded border border-slate-300 bg-white px-2 py-1"
-      >
-        {tenants.map((t) => (
-          <option key={t.id} value={t.id}>
-            [{t.role === "ACCOUNTANT" ? "세무사" : "고객사"}] {t.label}
-          </option>
-        ))}
-      </select>
+    <div className="flex items-center gap-3 text-sm">
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
+        {session.role === "ACCOUNTANT" ? "세무사" : "고객사"} · {session.email}
+      </span>
+      {clients.length > 0 && (
+        <form action={switchClientAction} className="flex items-center gap-2">
+          <ClientSelect
+            options={clients.map((c) => ({ id: c.id, name: c.name }))}
+            defaultValue={session.activeClientId}
+          />
+        </form>
+      )}
+      <form action={logoutAction}>
+        <button className="text-slate-500 hover:text-slate-700">로그아웃</button>
+      </form>
     </div>
   );
 }
