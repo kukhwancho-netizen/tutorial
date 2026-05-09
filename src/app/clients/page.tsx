@@ -11,7 +11,7 @@ const BIZ_TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function ClientsPage() {
-  if (!readSession()) redirect("/login");
+  if (!readSession()) redirect("/login?next=/clients");
   const clients = await listAccessibleClients();
 
   return (

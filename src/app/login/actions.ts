@@ -4,8 +4,16 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { clearSession, readSession, writeSession } from "@/lib/auth/session";
 
+// 오픈 리다이렉트 방지: 같은 출처의 절대 경로(/로 시작, //은 거부)만 허용
+function safeNext(raw: unknown): string {
+  if (typeof raw !== "string") return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
 export async function loginAction(_prev: unknown, formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const next = safeNext(formData.get("next"));
   if (!email) return { error: "이메일을 입력하세요." };
 
   const user = await db.user.findFirst({
@@ -24,7 +32,7 @@ export async function loginAction(_prev: unknown, formData: FormData) {
     firmId: user.firmId ?? null,
     activeClientId: user.memberships[0]?.clientId,
   });
-  redirect("/");
+  redirect(next);
 }
 
 export async function logoutAction() {

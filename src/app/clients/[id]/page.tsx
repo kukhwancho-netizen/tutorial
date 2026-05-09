@@ -16,7 +16,7 @@ export default async function ClientDetailPage({
     ({ client } = await requireClientAccess(params.id));
   } catch (e) {
     if (e instanceof AuthError) {
-      if (e.status === 401) redirect("/login");
+      if (e.status === 401) redirect(`/login?next=/clients/${encodeURIComponent(params.id)}`);
       // 403/404는 둘 다 notFound로 — 보안상 "존재하지만 권한없음"을 노출하지 않는다.
       notFound();
     }
