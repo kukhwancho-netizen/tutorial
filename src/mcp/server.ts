@@ -23,6 +23,7 @@ import {
 } from "@/lib/accounting/journal";
 import { findAnomalies } from "@/lib/accounting/anomaly";
 import { generateIcs } from "@/lib/calendar/ics";
+import { buildDigest, digestToMarkdown } from "@/lib/notify/digest";
 import {
   checkClientAccess,
   findAccessibleClients,
@@ -523,10 +524,22 @@ server.tool(
   },
 );
 
+server.tool(
+  "daily_digest",
+  "내가 접근 가능한 모든 고객사에 대해 다가오는 마감(N일) + 분개 이상 감지를 모은 마크다운 다이제스트 반환. 아침마다 '오늘 할 일'.",
+  {
+    horizonDays: z.number().int().min(1).max(60).default(14),
+  },
+  async ({ horizonDays }) => {
+    const digest = await buildDigest(await user(), { horizonDays });
+    return ok(digestToMarkdown(digest));
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[mcp] tax-accounting-mcp v0.5.0 ready (user=${userEmail})`);
+  console.error(`[mcp] tax-accounting-mcp v0.6.0 ready (user=${userEmail})`);
 }
 
 main().catch((e) => {

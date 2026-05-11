@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "demo": "tsx scripts/demo.ts",
-    "mcp": "tsx src/mcp/server.ts"
+    "mcp": "tsx src/mcp/server.ts",
+    "digest": "tsx scripts/digest.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

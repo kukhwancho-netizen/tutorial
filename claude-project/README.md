@@ -59,6 +59,7 @@
 | `knowledge/special-deductions.md` | 자녀세액공제·전자세금계산서 의무·의제매입세액공제·경비율 |
 | `knowledge/hometax-excel-spec.md` | 홈택스 엑셀 임포트 양식 안내 |
 | `knowledge/verification-log.md` | 공식 자료와의 교차 검증 로그 (출처 링크 포함) |
+| `knowledge/routine-notifications.md` | 매일 자동 알림 설정 (.ics / cron+Slack / MCP daily_digest) |
 | `knowledge/example-prompts.md` | 채팅창에 그대로 붙여 쓸 수 있는 예시 명령 |
 
 ## 면책
