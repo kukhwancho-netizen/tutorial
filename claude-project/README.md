@@ -56,6 +56,9 @@
 | `knowledge/tax-calendar.md` | 사업자 유형별 신고·납부 일정 (2025년 귀속 기준) |
 | `knowledge/biztype-rules.md` | 법인/일반/간이/면세 — 어떻게 다른가 |
 | `knowledge/account-codes.md` | 시드 계정과목 (분개 시 어느 계정을 쓰는지) |
+| `knowledge/special-deductions.md` | 자녀세액공제·전자세금계산서 의무·의제매입세액공제·경비율 |
+| `knowledge/hometax-excel-spec.md` | 홈택스 엑셀 임포트 양식 안내 |
+| `knowledge/verification-log.md` | 공식 자료와의 교차 검증 로그 (출처 링크 포함) |
 | `knowledge/example-prompts.md` | 채팅창에 그대로 붙여 쓸 수 있는 예시 명령 |
 
 ## 면책
