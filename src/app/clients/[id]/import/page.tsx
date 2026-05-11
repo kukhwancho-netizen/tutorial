@@ -36,17 +36,33 @@ export default async function ImportPage({
       <ImportForm clientId={client.id} />
 
       <section className="rounded-md border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-        <h2 className="mb-2 font-semibold text-slate-700">지원 컬럼 (자동 감지)</h2>
-        <ul className="space-y-0.5">
-          <li>• <b>거래일자</b>: 거래일자 / 작성일자 / 발급일자 / 일자 / 날짜</li>
-          <li>• <b>거래처</b>: 거래처 / 상호 / 매출처 / 매입처 / 공급자 / 공급받는자 / 업체명</li>
-          <li>• <b>사업자번호</b>: 사업자등록번호 / 사업자번호 / 등록번호 (선택)</li>
+        <h2 className="mb-2 font-semibold text-slate-700">지원 데이터 소스</h2>
+        <table className="w-full">
+          <thead className="text-slate-500">
+            <tr>
+              <th className="py-0.5 text-left font-normal">종류</th>
+              <th className="py-0.5 text-left font-normal">다운로드 경로</th>
+            </tr>
+          </thead>
+          <tbody className="text-slate-700">
+            <tr><td className="py-0.5 pr-3">매출 세금계산서 합계표</td><td>홈택스 → 조회/발급 → 매출·매입처별 세금계산서 합계표</td></tr>
+            <tr><td className="py-0.5 pr-3">매입 세금계산서 합계표</td><td>위와 동일 (매입 시트)</td></tr>
+            <tr><td className="py-0.5 pr-3">현금영수증 발행내역</td><td>홈택스 → 조회/발급 → 현금영수증 → 발행 내역 조회</td></tr>
+            <tr><td className="py-0.5 pr-3">현금영수증 사용내역</td><td>홈택스 → 조회/발급 → 현금영수증 → 사용 내역 조회</td></tr>
+            <tr><td className="py-0.5 pr-3">카드 매출내역</td><td>카드사 단말기 정산 화면 또는 PG사 엑셀</td></tr>
+            <tr><td className="py-0.5 pr-3">사업용 카드 사용내역</td><td>카드사 홈페이지 → 청구내역 → 엑셀 다운로드</td></tr>
+          </tbody>
+        </table>
+        <p className="mt-3 font-semibold text-slate-700">자동 매핑 컬럼 (헤더명 유연 대응)</p>
+        <ul className="mt-1 space-y-0.5">
+          <li>• <b>일자</b>: 거래일자 / 작성일자 / 발급일자 / 일자 / 날짜 / 사용일자</li>
+          <li>• <b>거래처</b>: 거래처 / 상호 / 매출처 / 매입처 / 공급자 / 가맹점명</li>
           <li>• <b>공급가액</b>: 공급가액 / 과세표준 / 매출액 / 매입액</li>
-          <li>• <b>세액</b>: 세액 / 부가세 / 부가가치세액 (선택)</li>
-          <li>• <b>합계</b>: 합계 / 합계금액 / 총액 / 금액 (선택)</li>
+          <li>• <b>세액</b>: 세액 / 부가세 / 부가가치세액</li>
+          <li>• <b>합계</b>: 합계 / 합계금액 / 총액 / 금액</li>
         </ul>
         <p className="mt-2">
-          시트명·헤더에 &quot;매출&quot;/&quot;매입&quot;이 포함되면 자동으로 구분합니다. 헷갈리면 위에서 명시 선택.
+          매입 데이터는 가맹점명으로 비용 분류(식자재/차량유지/통신비/광고선전비/사무용품/복리후생 등)를 자동 추천합니다.
         </p>
       </section>
     </div>

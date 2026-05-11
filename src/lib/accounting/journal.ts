@@ -168,7 +168,10 @@ export async function createStandardJournalEntry(input: {
  * 한 건 실패해도 다른 건은 진행하고, per-row 결과를 반환.
  */
 export async function createStandardJournalEntriesBulk(
-  inputs: Array<Parameters<typeof createStandardJournalEntry>[0] & { sourceRow?: number }>,
+  inputs: Array<Parameters<typeof createStandardJournalEntry>[0] & {
+    sourceRow?: number;
+    category?: string;
+  }>,
 ) {
   const results: Array<{
     sourceRow?: number;
@@ -179,6 +182,12 @@ export async function createStandardJournalEntriesBulk(
   for (const input of inputs) {
     try {
       const entry = await createStandardJournalEntry(input);
+      if (input.category) {
+        await db.journalEntry.update({
+          where: { id: entry.id },
+          data: { category: input.category },
+        });
+      }
       results.push({ sourceRow: input.sourceRow, ok: true, entryId: entry.id });
     } catch (e) {
       results.push({

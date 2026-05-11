@@ -8,6 +8,32 @@
 // 출력: ImportedRow[] — 우리 시스템의 standard journal entry로 바로 매핑 가능
 
 import * as XLSX from "xlsx";
+import { suggestCategory } from "./categoryGuess";
+
+/**
+ * 임포트 가능한 데이터 소스 타입.
+ * 각 타입마다 분개 방향(SALE/PURCHASE), 카테고리 추천 여부가 다름.
+ */
+export type ImportSource =
+  | "AUTO" // 자동 감지 (시트명·헤더 기준)
+  | "SALES_INVOICE" // 매출처별 세금계산서 합계표
+  | "PURCHASE_INVOICE" // 매입처별 세금계산서 합계표
+  | "CASH_RECEIPT_SALES" // 현금영수증 발행내역 (사업자→소비자, 매출)
+  | "CASH_RECEIPT_PURCHASE" // 현금영수증 사용내역 (사업주가 사용, 매입)
+  | "CARD_SALES" // 사업장 카드매출
+  | "CARD_PURCHASE"; // 사업용 카드 사용내역 (매입)
+
+export const SOURCE_META: Record<
+  Exclude<ImportSource, "AUTO">,
+  { label: string; direction: "SALE" | "PURCHASE"; suggestCategory: boolean }
+> = {
+  SALES_INVOICE: { label: "매출 세금계산서 합계표", direction: "SALE", suggestCategory: false },
+  PURCHASE_INVOICE: { label: "매입 세금계산서 합계표", direction: "PURCHASE", suggestCategory: true },
+  CASH_RECEIPT_SALES: { label: "현금영수증 발행내역 (매출)", direction: "SALE", suggestCategory: false },
+  CASH_RECEIPT_PURCHASE: { label: "현금영수증 사용내역 (매입)", direction: "PURCHASE", suggestCategory: true },
+  CARD_SALES: { label: "카드 매출내역", direction: "SALE", suggestCategory: false },
+  CARD_PURCHASE: { label: "사업용 카드 사용내역 (매입)", direction: "PURCHASE", suggestCategory: true },
+};
 
 export type ImportedRow = {
   rowIndex: number; // 원본 행 번호 (1-based, 헤더 제외)
@@ -19,6 +45,8 @@ export type ImportedRow = {
   totalAmount: number;
   /** SALE = 매출, PURCHASE = 매입 */
   direction: "SALE" | "PURCHASE";
+  /** 가맹점명 기반 자동 추천 카테고리 (매입 시) */
+  suggestedCategory?: string;
   /** 원본 파싱 에러 (있으면 commit 전 사용자에게 노출) */
   warning?: string;
 };
@@ -33,7 +61,7 @@ export type ParseResult = {
 // 컬럼 자동 매핑 — 홈택스 양식 + 흔한 변형 모두 처리
 // ----------------------------------------------------------------------------
 
-const COLUMN_PATTERNS: Record<keyof Omit<ImportedRow, "rowIndex" | "warning" | "direction">, RegExp[]> = {
+const COLUMN_PATTERNS: Record<keyof Omit<ImportedRow, "rowIndex" | "warning" | "direction" | "suggestedCategory">, RegExp[]> = {
   occurredOn: [/거래일자/, /작성일자/, /발급일자/, /^일자$/, /^날짜$/, /date/i],
   counterparty: [/거래처/, /상호/, /매출처/, /매입처/, /공급(자|받는자)/, /업체명/, /name/i],
   counterpartyBizNo: [/사업자등록번호/, /사업자번호/, /등록번호/, /biz.*no/i],
@@ -139,6 +167,8 @@ function detectHeaderRowIndex(rows: unknown[][]): { headerIndex: number; map: Co
 export type ParseOptions = {
   /** 명시적 방향 지정. 미지정이면 헤더/시트명에서 추론, 모호하면 SALE. */
   direction?: "SALE" | "PURCHASE";
+  /** 데이터 소스 타입 (AUTO면 헤더 기반 추론). 카테고리 추천 여부 결정. */
+  source?: ImportSource;
 };
 
 export function parseSheet(
@@ -160,11 +190,18 @@ export function parseSheet(
 
   const headers = (rows[headerIndex] ?? []).map((c) => String(c ?? ""));
   const detected = detectDirectionFromHeaders(headers, sheetName);
-  const direction: "SALE" | "PURCHASE" = opts.direction
-    ? opts.direction
-    : detected === "PURCHASE"
-      ? "PURCHASE"
-      : "SALE";
+
+  // source가 명시되면 그 메타가 우선 (direction + 카테고리 추천 여부)
+  const sourceMeta =
+    opts.source && opts.source !== "AUTO" ? SOURCE_META[opts.source] : null;
+  const direction: "SALE" | "PURCHASE" = sourceMeta
+    ? sourceMeta.direction
+    : opts.direction
+      ? opts.direction
+      : detected === "PURCHASE"
+        ? "PURCHASE"
+        : "SALE";
+  const wantCategorySuggest = sourceMeta?.suggestCategory ?? direction === "PURCHASE";
 
   for (let r = headerIndex + 1; r < rows.length; r++) {
     const row = rows[r];
@@ -210,6 +247,7 @@ export function parseSheet(
       vatAmount,
       totalAmount,
       direction,
+      suggestedCategory: wantCategorySuggest ? suggestCategory(counterparty) : undefined,
       warning,
     });
   }
@@ -220,6 +258,18 @@ export function parseSheet(
 // ----------------------------------------------------------------------------
 // 입력 진입점 — File Buffer / CSV 문자열 → ParseResult
 // ----------------------------------------------------------------------------
+
+/** AUTO일 때 헤더 키워드로 source 추정 (간단) */
+function inferSourceFromHeaders(headers: string[], sheetName: string): ImportSource | null {
+  const joined = headers.join(" ") + " " + sheetName;
+  if (/현금영수증.*발행|발행.*현금영수증/.test(joined)) return "CASH_RECEIPT_SALES";
+  if (/현금영수증.*사용|사용.*현금영수증|현금영수증.*매입/.test(joined)) return "CASH_RECEIPT_PURCHASE";
+  if (/카드.*매출|매출.*카드/.test(joined)) return "CARD_SALES";
+  if (/카드.*사용|카드.*매입|법인카드|사업용.*카드/.test(joined)) return "CARD_PURCHASE";
+  if (/매출.*세금계산서|매출.*합계표/.test(joined)) return "SALES_INVOICE";
+  if (/매입.*세금계산서|매입.*합계표/.test(joined)) return "PURCHASE_INVOICE";
+  return null;
+}
 
 export function parseHometaxXlsx(buffer: ArrayBuffer | Buffer, opts: ParseOptions = {}): ParseResult {
   const wb = XLSX.read(buffer, { type: "array", cellDates: true });

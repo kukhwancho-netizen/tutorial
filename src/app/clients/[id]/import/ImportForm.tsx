@@ -42,15 +42,23 @@ export function ImportForm({ clientId }: { clientId: string }) {
           />
         </label>
         <label className="block">
-          <span className="text-sm font-medium text-slate-700">거래 구분</span>
+          <span className="text-sm font-medium text-slate-700">데이터 종류</span>
           <select
-            name="direction"
+            name="source"
             defaultValue="AUTO"
             className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
           >
             <option value="AUTO">자동 감지 (시트명·헤더 기준)</option>
-            <option value="SALE">매출로 강제</option>
-            <option value="PURCHASE">매입으로 강제</option>
+            <optgroup label="매출 (수익)">
+              <option value="SALES_INVOICE">매출 세금계산서 합계표 (홈택스)</option>
+              <option value="CASH_RECEIPT_SALES">현금영수증 발행내역 (홈택스)</option>
+              <option value="CARD_SALES">카드 매출내역 (카드사 단말기 정산)</option>
+            </optgroup>
+            <optgroup label="매입 (비용) — 가맹점명 기반 카테고리 자동 추천">
+              <option value="PURCHASE_INVOICE">매입 세금계산서 합계표 (홈택스)</option>
+              <option value="CASH_RECEIPT_PURCHASE">현금영수증 사용내역 (홈택스)</option>
+              <option value="CARD_PURCHASE">사업용 카드 사용내역 (카드사 명세서)</option>
+            </optgroup>
           </select>
         </label>
         <button
@@ -146,6 +154,7 @@ function Preview({
               <th className="px-2 py-1">행</th>
               <th className="px-2 py-1">일자</th>
               <th className="px-2 py-1">거래처</th>
+              {direction === "PURCHASE" && <th className="px-2 py-1">추천 분류</th>}
               <th className="px-2 py-1 text-right">공급가액</th>
               <th className="px-2 py-1 text-right">부가세</th>
               <th className="px-2 py-1 text-right">합계</th>
@@ -158,6 +167,17 @@ function Preview({
                 <td className="px-2 py-1 font-mono text-slate-400">{r.rowIndex}</td>
                 <td className="px-2 py-1 font-mono">{r.occurredOn}</td>
                 <td className="px-2 py-1">{r.counterparty}</td>
+                {direction === "PURCHASE" && (
+                  <td className="px-2 py-1">
+                    {r.suggestedCategory ? (
+                      <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10px] text-brand-700">
+                        {r.suggestedCategory}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-2 py-1 text-right font-mono">{fmt(r.supplyAmount)}</td>
                 <td className="px-2 py-1 text-right font-mono">{fmt(r.vatAmount)}</td>
                 <td className="px-2 py-1 text-right font-mono">{fmt(r.totalAmount)}</td>
@@ -166,7 +186,7 @@ function Preview({
             ))}
             {result.rows.length > 100 && (
               <tr>
-                <td colSpan={7} className="px-2 py-2 text-center text-slate-400">
+                <td colSpan={direction === "PURCHASE" ? 8 : 7} className="px-2 py-2 text-center text-slate-400">
                   … 외 {result.rows.length - 100}건 (모두 저장됩니다)
                 </td>
               </tr>
@@ -174,6 +194,13 @@ function Preview({
           </tbody>
         </table>
       </div>
+
+      {direction === "PURCHASE" && (
+        <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
+          💡 거래처명 키워드로 분류 자동 추천 (이마트→식자재 / 스타벅스→복리후생 / GS칼텍스→차량유지 등).
+          확실하지 않은 건은 빈 칸으로 표시되며, 저장 후 분개 상세에서 수정 가능합니다.
+        </p>
+      )}
 
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input

@@ -18,7 +18,7 @@ export default async function ReportsPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { period?: string; year?: string };
+  searchParams?: { period?: string; year?: string; view?: string };
 }) {
   let client;
   try {
@@ -34,6 +34,7 @@ export default async function ReportsPage({
   const year = Number(searchParams?.year ?? new Date().getFullYear());
   const periodId: PeriodId = (PERIODS.find((p) => p.id === searchParams?.period)?.id ?? "1H") as PeriodId;
   const period = PERIODS.find((p) => p.id === periodId)!;
+  const view = (searchParams?.view ?? "summary") as "summary" | "detail";
   const from = new Date(year, period.from, 1);
   const to = new Date(year, period.to, 1);
 
@@ -118,11 +119,27 @@ export default async function ReportsPage({
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}
           </select>
+          <input type="hidden" name="view" value={view} />
           <button className="rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700">
             조회
           </button>
         </form>
       </header>
+
+      <nav className="flex gap-1 text-xs">
+        <Link
+          href={`?period=${periodId}&year=${year}&view=summary`}
+          className={`rounded border px-2 py-1 ${view === "summary" ? "border-brand-500 bg-brand-50 font-semibold text-brand-700" : "border-slate-300 text-slate-600"}`}
+        >
+          📊 거래처별 집계
+        </Link>
+        <Link
+          href={`?period=${periodId}&year=${year}&view=detail`}
+          className={`rounded border px-2 py-1 ${view === "detail" ? "border-brand-500 bg-brand-50 font-semibold text-brand-700" : "border-slate-300 text-slate-600"}`}
+        >
+          📋 건별 명세 (한 줄 한 줄)
+        </Link>
+      </nav>
 
       {/* 부가세 ===================================================== */}
       <article className="rounded-lg border-2 border-slate-300 bg-white p-6 shadow-sm print:shadow-none">
@@ -132,10 +149,14 @@ export default async function ReportsPage({
           &quot;매출처별/매입처별 세금계산서 합계표&quot;로 별도 제출.
         </p>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <PartnerTable title="매출처별 세금계산서 합계" rows={salesByPartner} total={{ supply: salesSupply, vat: salesVat }} />
-          <PartnerTable title="매입처별 세금계산서 합계" rows={purchByPartner} total={{ supply: purchSupply, vat: purchVat }} />
-        </div>
+        {view === "detail" ? (
+          <DetailTable entries={entries} />
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <PartnerTable title="매출처별 세금계산서 합계" rows={salesByPartner} total={{ supply: salesSupply, vat: salesVat }} />
+            <PartnerTable title="매입처별 세금계산서 합계" rows={purchByPartner} total={{ supply: purchSupply, vat: purchVat }} />
+          </div>
+        )}
 
         <div className="mt-4 rounded-md bg-slate-50 p-3 text-sm">
           <Row label="과세 매출 (공급가액)" value={salesSupply} />
@@ -221,6 +242,69 @@ export default async function ReportsPage({
         ⚠ 본 자료는 분개 데이터 기반 자동 집계입니다. 신고 전 최종 검토 필수.
         세금계산서·신용카드 합계표 등 별도 첨부서류는 홈택스에서 별도 작성.
       </p>
+    </div>
+  );
+}
+
+function DetailTable({
+  entries,
+}: {
+  entries: Array<{
+    id: string;
+    occurredOn: Date;
+    counterparty: string | null;
+    vatDirection: string | null;
+    supplyAmount: number;
+    vatAmount: number;
+    totalAmount: number;
+    category: string | null;
+  }>;
+}) {
+  if (entries.length === 0) {
+    return <p className="rounded-md border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">해당 기간 거래 없음</p>;
+  }
+  return (
+    <div className="max-h-[600px] overflow-auto rounded border border-slate-200">
+      <table className="w-full text-xs">
+        <thead className="sticky top-0 bg-slate-100 text-slate-700">
+          <tr>
+            <th className="px-2 py-1.5 text-left">일자</th>
+            <th className="px-2 py-1.5 text-left">구분</th>
+            <th className="px-2 py-1.5 text-left">거래처</th>
+            <th className="px-2 py-1.5 text-left">분류</th>
+            <th className="px-2 py-1.5 text-right">공급가액</th>
+            <th className="px-2 py-1.5 text-right">부가세</th>
+            <th className="px-2 py-1.5 text-right">합계</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((e) => (
+            <tr key={e.id} className="border-b border-slate-100 hover:bg-slate-50">
+              <td className="px-2 py-1 font-mono">{e.occurredOn.toISOString().slice(0, 10)}</td>
+              <td className="px-2 py-1">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] ${
+                  e.vatDirection === "SALE" ? "bg-blue-50 text-blue-700"
+                    : e.vatDirection === "PURCHASE" ? "bg-amber-50 text-amber-700"
+                      : "bg-slate-100 text-slate-500"
+                }`}>
+                  {e.vatDirection === "SALE" ? "매출" : e.vatDirection === "PURCHASE" ? "매입" : "면세"}
+                </span>
+              </td>
+              <td className="px-2 py-1">{e.counterparty ?? "-"}</td>
+              <td className="px-2 py-1 text-slate-600">{e.category ?? "-"}</td>
+              <td className="px-2 py-1 text-right font-mono">{fmt(e.supplyAmount)}</td>
+              <td className="px-2 py-1 text-right font-mono">{fmt(e.vatAmount)}</td>
+              <td className="px-2 py-1 text-right font-mono font-semibold">{fmt(e.totalAmount)}</td>
+            </tr>
+          ))}
+          <tr className="sticky bottom-0 border-t-2 border-slate-800 bg-white font-bold">
+            <td colSpan={4} className="px-2 py-1.5">합계 ({entries.length}건)</td>
+            <td className="px-2 py-1.5 text-right font-mono">{fmt(entries.reduce((s, e) => s + e.supplyAmount, 0))}</td>
+            <td className="px-2 py-1.5 text-right font-mono">{fmt(entries.reduce((s, e) => s + e.vatAmount, 0))}</td>
+            <td className="px-2 py-1.5 text-right font-mono">{fmt(entries.reduce((s, e) => s + e.totalAmount, 0))}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }

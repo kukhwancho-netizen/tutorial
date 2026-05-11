@@ -20,9 +20,17 @@ export type ParseState =
 // FormData.get은 누락 시 null을 반환 → nullish 안전화
 const ParseInput = z.object({
   clientId: z.preprocess((v) => (v == null ? "" : v), z.string().min(1)),
-  direction: z.preprocess(
+  source: z.preprocess(
     (v) => v ?? "AUTO",
-    z.enum(["AUTO", "SALE", "PURCHASE"]),
+    z.enum([
+      "AUTO",
+      "SALES_INVOICE",
+      "PURCHASE_INVOICE",
+      "CASH_RECEIPT_SALES",
+      "CASH_RECEIPT_PURCHASE",
+      "CARD_SALES",
+      "CARD_PURCHASE",
+    ]),
   ),
 });
 
@@ -32,7 +40,7 @@ export async function parseImportAction(
 ): Promise<ParseState> {
   const parsed = ParseInput.safeParse({
     clientId: formData.get("clientId"),
-    direction: formData.get("direction"),
+    source: formData.get("source"),
   });
   if (!parsed.success) {
     return {
@@ -56,7 +64,7 @@ export async function parseImportAction(
     return { phase: "error", error: "파일 크기는 5MB 이하만 지원합니다." };
   }
 
-  const opts = parsed.data.direction === "AUTO" ? {} : { direction: parsed.data.direction };
+  const opts = { source: parsed.data.source };
 
   let result: ParseResult;
   try {
@@ -84,12 +92,9 @@ export async function parseImportAction(
     });
   }
 
+  // 파싱된 행에서 첫 행의 direction을 대표값으로 사용 (모두 동일함)
   const finalDirection: "SALE" | "PURCHASE" =
-    parsed.data.direction === "AUTO"
-      ? result.detectedDirection === "PURCHASE"
-        ? "PURCHASE"
-        : "SALE"
-      : (parsed.data.direction as "SALE" | "PURCHASE");
+    result.rows[0]?.direction ?? (result.detectedDirection === "PURCHASE" ? "PURCHASE" : "SALE");
 
   return {
     phase: "parsed",
@@ -145,6 +150,7 @@ export async function commitImportAction(
     settlement: "CASH" as const,
     supplyAmount: r.supplyAmount,
     isTaxFree: r.vatAmount === 0,
+    category: r.suggestedCategory, // 가맹점명 기반 자동 추천 카테고리도 같이 저장
     sourceRow: r.rowIndex,
   }));
 
