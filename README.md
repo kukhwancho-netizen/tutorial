@@ -121,6 +121,30 @@ prisma/
 - 세무사 ↔ 고객사 N:M (`Membership`) 권한
 - 오픈 리다이렉트 방지: `next` 파라미터는 `/` 시작이고 `//` 아닐 때만 허용
 
+## Claude Project로 쓰기 (대화창에서 끝내기)
+
+채팅 인터페이스(claude.ai / Claude Desktop)에서 본 시스템 전체를 자연어로 다루고 싶다면 `claude-project/` 디렉터리의 키트를 사용하세요:
+
+```
+claude-project/
+├── README.md                       ← 5분 안에 셋업
+├── project-instructions.md         ← Project Custom Instructions에 그대로 붙여넣기
+├── skill-tree.md                   ← 무엇을 할 수 있나 (스킬트리)
+├── workflows.md                    ← 흔한 시나리오별 분기 (W1~W7)
+└── knowledge/                      ← Project Knowledge에 업로드
+    ├── tax-calendar.md             세무 일정 (2025년 귀속)
+    ├── biztype-rules.md            법인/일반/간이/면세 차이
+    ├── account-codes.md            시드 계정과목 + 표준 분개 패턴
+    └── example-prompts.md          그대로 붙여 쓸 명령 30개
+```
+
+요약하면:
+1. Claude Desktop 켜고 아래 "MCP 서버" 설정 → 도구 10개 연결
+2. Claude Desktop에서 새 Project → `project-instructions.md`를 Custom Instructions로 + `knowledge/*.md`를 Knowledge로 업로드
+3. 영수증 사진 첨부 + "샘플상사 분개로 넣어줘" → 끝
+
+자세한 내용은 [`claude-project/README.md`](./claude-project/README.md).
+
 ## Claude Desktop 연결 (MCP 서버)
 
 이 레포는 `src/mcp/server.ts` 에 MCP(Model Context Protocol) 서버를 포함합니다. Claude Desktop에 연결하면 채팅창에서 자연어로:
