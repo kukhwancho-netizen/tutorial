@@ -17,8 +17,6 @@ export type ParseState =
   | { phase: "imported"; ok: number; failed: number; errors: Array<{ row: number; error: string }> }
   | { phase: "error"; error: string };
 
-const initial: ParseState = { phase: "idle" };
-
 const ParseInput = z.object({
   clientId: z.string().min(1),
   direction: z.enum(["AUTO", "SALE", "PURCHASE"]).default("AUTO"),
@@ -157,5 +155,3 @@ export async function commitImportAction(
     })),
   };
 }
-
-export { initial as initialState };

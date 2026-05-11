@@ -6,9 +6,10 @@ import { fmt } from "@/lib/format";
 import {
   parseImportAction,
   commitImportAction,
-  initialState,
   type ParseState,
 } from "./actions";
+
+const initialState: ParseState = { phase: "idle" };
 
 const DIR_LABEL: Record<"SALE" | "PURCHASE", string> = {
   SALE: "매출",
