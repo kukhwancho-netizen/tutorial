@@ -17,9 +17,13 @@ export type ParseState =
   | { phase: "imported"; ok: number; failed: number; errors: Array<{ row: number; error: string }> }
   | { phase: "error"; error: string };
 
+// FormData.get은 누락 시 null을 반환 → nullish 안전화
 const ParseInput = z.object({
-  clientId: z.string().min(1),
-  direction: z.enum(["AUTO", "SALE", "PURCHASE"]).default("AUTO"),
+  clientId: z.preprocess((v) => (v == null ? "" : v), z.string().min(1)),
+  direction: z.preprocess(
+    (v) => v ?? "AUTO",
+    z.enum(["AUTO", "SALE", "PURCHASE"]),
+  ),
 });
 
 export async function parseImportAction(
@@ -28,9 +32,14 @@ export async function parseImportAction(
 ): Promise<ParseState> {
   const parsed = ParseInput.safeParse({
     clientId: formData.get("clientId"),
-    direction: formData.get("direction") ?? "AUTO",
+    direction: formData.get("direction"),
   });
-  if (!parsed.success) return { phase: "error", error: "입력값이 올바르지 않습니다." };
+  if (!parsed.success) {
+    return {
+      phase: "error",
+      error: parsed.error.issues[0]?.message ?? "입력값이 올바르지 않습니다.",
+    };
+  }
 
   try {
     await requireClientAccess(parsed.data.clientId);
@@ -91,8 +100,8 @@ export async function parseImportAction(
 }
 
 const CommitInput = z.object({
-  clientId: z.string().min(1),
-  payload: z.string().min(1),
+  clientId: z.preprocess((v) => (v == null ? "" : v), z.string().min(1)),
+  payload: z.preprocess((v) => (v == null ? "" : v), z.string().min(1)),
 });
 
 export async function commitImportAction(
