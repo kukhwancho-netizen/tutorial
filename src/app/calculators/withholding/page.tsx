@@ -12,22 +12,41 @@ import { GUIDES } from "@/lib/tax/guides";
 
 type Mode = "freelance" | "etc" | "wage";
 
+const NON_TAX_LIMITS = {
+  meal: 200_000,
+  carAllowance: 200_000,
+  childcare: 200_000,
+};
+
 export default function WithholdingCalculatorPage() {
   const [mode, setMode] = useState<Mode>("freelance");
   const [payment, setPayment] = useState(0);
   const [dependents, setDependents] = useState(1);
   const [children, setChildren] = useState(0);
 
+  // 근로소득 모드용 비과세 항목
+  const [meal, setMeal] = useState(0);
+  const [carAllowance, setCarAllowance] = useState(0);
+  const [childcare, setChildcare] = useState(0);
+  const [otherNonTax, setOtherNonTax] = useState(0);
+
+  const totalNonTax =
+    Math.min(meal, NON_TAX_LIMITS.meal) +
+    Math.min(carAllowance, NON_TAX_LIMITS.carAllowance) +
+    Math.min(childcare, NON_TAX_LIMITS.childcare) +
+    otherNonTax;
+  const taxableWage = mode === "wage" ? Math.max(0, payment - totalNonTax) : payment;
+
   const freelance = useMemo(() => calcFreelanceWithholding(payment), [payment]);
   const etc = useMemo(() => calcEtcIncomeWithholding(payment), [payment]);
   const wage = useMemo(
     () =>
       estimateMonthlyWageWithholding({
-        monthlyGross: payment,
+        monthlyGross: taxableWage,
         dependents,
         childrenUnder20: children,
       }),
-    [payment, dependents, children],
+    [taxableWage, dependents, children],
   );
 
   return (
@@ -53,7 +72,7 @@ export default function WithholdingCalculatorPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <MoneyInput
-            label={mode === "wage" ? "월 급여 (비과세 제외)" : "지급금액"}
+            label={mode === "wage" ? "월 급여 총액 (세전, 비과세 포함)" : "지급금액"}
             value={payment}
             onChange={setPayment}
           />
@@ -83,6 +102,48 @@ export default function WithholdingCalculatorPage() {
           )}
         </div>
 
+        {mode === "wage" && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">비과세 항목 (월)</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <MoneyInput
+                label="식대"
+                value={meal}
+                onChange={setMeal}
+                hint={`한도 ${fmt(NON_TAX_LIMITS.meal)} · 초과분 과세`}
+              />
+              <MoneyInput
+                label="자가운전보조금"
+                value={carAllowance}
+                onChange={setCarAllowance}
+                hint={`한도 ${fmt(NON_TAX_LIMITS.carAllowance)} · 본인 차량·업무용`}
+              />
+              <MoneyInput
+                label="출산·보육수당 (6세 이하)"
+                value={childcare}
+                onChange={setChildcare}
+                hint={`한도 ${fmt(NON_TAX_LIMITS.childcare)}`}
+              />
+              <MoneyInput
+                label="기타 비과세"
+                value={otherNonTax}
+                onChange={setOtherNonTax}
+                hint="연구활동비·일직숙직료·생산직 야간 등"
+              />
+            </div>
+            <div className="mt-3 grid gap-1 border-t border-slate-200 pt-3 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>비과세 합계 (한도 적용)</span>
+                <span className="font-mono">{fmt(totalNonTax)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-brand-700">
+                <span>과세 월급여 (= 총액 − 비과세)</span>
+                <span className="font-mono">{fmt(taxableWage)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="rounded-md bg-slate-50 p-4 text-sm">
           {mode === "freelance" && (
             <>
@@ -105,7 +166,7 @@ export default function WithholdingCalculatorPage() {
               <Row label="합계" value={wage.incomeTax + wage.localTax} emphasis />
               <p className="mt-2 text-xs text-slate-500">
                 * 정확한 금액은 국세청 근로소득 간이세액표를 따르며, 본 계산은 누진세율 기반의
-                근사치입니다.
+                근사치입니다. 4대보험은 별도 계산기 참조.
               </p>
             </>
           )}
