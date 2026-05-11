@@ -176,7 +176,7 @@ export function JournalForm({ clientId }: { clientId: string }) {
           📋 영수증 라인 명세 (품목별)
         </legend>
         <p className="mb-2 text-xs text-slate-500">
-          품목별로 입력하면 합계가 자동 계산됩니다. 라인 미입력 시 아래 "공급가액 직접 입력"으로
+          품목별로 입력하면 합계가 자동 계산됩니다. 라인 미입력 시 아래 &quot;공급가액 직접 입력&quot;으로
           간단 분개 가능.
         </p>
         <div className="overflow-x-auto">
