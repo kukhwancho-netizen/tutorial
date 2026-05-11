@@ -5,15 +5,20 @@ import { loginAction } from "./actions";
 
 const initialState = { error: undefined as string | undefined };
 
+// 클라이언트용 next 검증 (서버 액션에서 한 번 더 검증되므로 1차 방어)
+function clientSafeNext(raw: unknown): string {
+  if (typeof raw !== "string") return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
 export default function LoginPage({
   searchParams,
 }: {
   searchParams?: { next?: string };
 }) {
   const [state, formAction] = useFormState(loginAction, initialState);
-  // 같은 출처 절대 경로만 통과 — 클라이언트에서도 1차 방어 (서버에서 한 번 더 검증)
-  const nextRaw = searchParams?.next ?? "/";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
+  const next = clientSafeNext(searchParams?.next);
 
   return (
     <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-8">

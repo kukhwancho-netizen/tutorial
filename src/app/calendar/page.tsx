@@ -10,21 +10,14 @@ import {
   groupByMonth,
   CATEGORY_LABEL,
   CATEGORY_COLOR,
-  BIZ_TYPE_LABEL,
-  type BizType,
 } from "@/lib/tax/calendar";
+import { BIZ_TYPES, BIZ_TYPE_LABEL, isBizType, type BizType } from "@/lib/tax/bizType";
 import { db } from "@/lib/db";
 import { readSession } from "@/lib/auth/session";
 
 const MONTH_LABEL = [
   "1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월",
 ];
-
-const BIZ_TYPES: BizType[] = ["CORPORATION", "SOLE_GENERAL", "SOLE_SIMPLIFIED", "SOLE_TAX_FREE"];
-
-function isValidBizType(v: unknown): v is BizType {
-  return typeof v === "string" && (BIZ_TYPES as string[]).includes(v);
-}
 
 export default async function CalendarPage({
   searchParams,
@@ -39,10 +32,10 @@ export default async function CalendarPage({
       where: { id: session.activeClientId },
       select: { bizType: true },
     });
-    if (client && isValidBizType(client.bizType)) defaultBizType = client.bizType;
+    if (client && isBizType(client.bizType)) defaultBizType = client.bizType;
   }
 
-  const selected: BizType | "ALL" = isValidBizType(searchParams?.bizType)
+  const selected: BizType | "ALL" = isBizType(searchParams?.bizType)
     ? searchParams!.bizType as BizType
     : searchParams?.bizType === "ALL"
       ? "ALL"

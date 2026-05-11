@@ -29,6 +29,8 @@
 | `get_client_vat_aggregate` | 고객사·기간별 매출/매입/납부세액 |
 | `create_journal_entry` | **분개 입력 — 영수증/세금계산서를 데이터로 저장할 때** |
 | `list_recent_journal_entries` | 최근 분개 조회 |
+| `verify_biz_no` | 거래처 등록 전 사업자등록번호 진위·상태(계속/휴업/폐업) 조회 |
+| `generate_vat_filing_guide` | 홈택스 부가세 신고 단계별 가이드(마크다운) 생성 — 사용자가 직접 신고할 때 |
 
 도구가 연결돼 있지 않으면(웹 Project) 지식 파일(knowledge/)의 정적 정보로만 답하고, 실행이 필요한 요청은 "MCP가 연결되면 자동으로 처리됩니다 — 현재는 다음 분개를 직접 입력하세요:" 라고 안내한 뒤 분개 명세를 출력합니다.
 
@@ -69,11 +71,12 @@
 2. 없으면 `list_clients`로 선택지 제시
 3. 결과를 "임박(D-7 이내) / 이번달 / 예정" 으로 분류해 표시
 
-### 3.4 "부가세 신고 자료 줘"
+### 3.4 "부가세 신고 자료 줘" / "부가세 신고 어떻게 해?"
 
 1. 신고 기간 식별 (예: 1기 확정 = 1~6월). 사용자에게 확인.
-2. `get_client_vat_aggregate(clientId, from, to)` 호출
-3. 결과를 신고서 양식에 맞게 표로 정리
+2. **자료만 원함** → `get_client_vat_aggregate(clientId, from, to)` → 표로 정리
+3. **직접 신고 가이드까지 원함** → `generate_vat_filing_guide(clientId, period, from, to)` → 그 마크다운을 그대로 출력 (홈택스 화면 단계별)
+4. 본 시스템은 신고 실행을 안 함. 사용자가 홈택스에서 위 자료 입력.
 
 ### 3.5 "이 거래 어떻게 분개해?"
 

@@ -1,14 +1,9 @@
 // 세무 일정 단일 소스. 모든 페이지가 여기서 파생된다.
 // 법령 변경 시 본 파일만 갱신.
-//
-// 적용 사업자 유형:
-//   CORPORATION       법인사업자
-//   SOLE_GENERAL      개인 일반과세자
-//   SOLE_SIMPLIFIED   개인 간이과세자
-//   SOLE_TAX_FREE     면세사업자
-//   ALL               전부 (4대보험, 원천세 등 사업주 공통)
 
-export type BizType = "CORPORATION" | "SOLE_GENERAL" | "SOLE_SIMPLIFIED" | "SOLE_TAX_FREE";
+import { BIZ_TYPE_LABEL, type BizType } from "./bizType";
+
+export { BIZ_TYPE_LABEL, type BizType };
 
 export type TaxEventCategory = "vat" | "income" | "withholding" | "insurance" | "business-status";
 
@@ -284,9 +279,3 @@ export const CATEGORY_COLOR: Record<TaxEventCategory, string> = {
   "business-status": "bg-slate-50 text-slate-700 border-slate-200",
 };
 
-export const BIZ_TYPE_LABEL: Record<BizType, string> = {
-  CORPORATION: "법인사업자",
-  SOLE_GENERAL: "개인 일반과세자",
-  SOLE_SIMPLIFIED: "개인 간이과세자",
-  SOLE_TAX_FREE: "면세사업자",
-};

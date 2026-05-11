@@ -7,6 +7,21 @@ import { db } from "@/lib/db";
 
 export type TxnDirection = "SALE" | "PURCHASE";
 
+/**
+ * 표준 분개에 쓰이는 시드 계정과목 코드.
+ * `prisma/seed.ts`와 정합성을 유지해야 한다.
+ */
+export const STANDARD_ACCOUNT_CODES = {
+  CASH: "101",            // 현금
+  BANK: "102",            // 보통예금
+  AR: "108",              // 외상매출금
+  VAT_RECEIVABLE: "135",  // 부가세대급금
+  INVENTORY: "146",       // 상품
+  AP: "251",              // 외상매입금
+  VAT_PAYABLE: "255",     // 부가세예수금
+  SALES_REVENUE: "401",   // 상품매출
+} as const;
+
 export type JournalLineInput = {
   accountId: string;
   debit?: number;
@@ -111,13 +126,13 @@ export async function createStandardJournalEntry(input: {
     return a.id;
   };
 
-  const cash = pick("101");
-  const ar = pick("108");
-  const ap = pick("251");
-  const vatPayable = pick("255");
-  const vatCreditable = pick("135");
-  const salesRev = pick("401");
-  const inventory = pick("146");
+  const cash = pick(STANDARD_ACCOUNT_CODES.CASH);
+  const ar = pick(STANDARD_ACCOUNT_CODES.AR);
+  const ap = pick(STANDARD_ACCOUNT_CODES.AP);
+  const vatPayable = pick(STANDARD_ACCOUNT_CODES.VAT_PAYABLE);
+  const vatCreditable = pick(STANDARD_ACCOUNT_CODES.VAT_RECEIVABLE);
+  const salesRev = pick(STANDARD_ACCOUNT_CODES.SALES_REVENUE);
+  const inventory = pick(STANDARD_ACCOUNT_CODES.INVENTORY);
 
   const lines: JournalLineInput[] = [];
   if (input.direction === "SALE") {

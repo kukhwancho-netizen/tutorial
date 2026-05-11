@@ -9,15 +9,8 @@ import {
   upcoming,
   CATEGORY_LABEL,
   CATEGORY_COLOR,
-  BIZ_TYPE_LABEL,
-  type BizType,
 } from "@/lib/tax/calendar";
-
-const BIZ_TYPES: BizType[] = ["CORPORATION", "SOLE_GENERAL", "SOLE_SIMPLIFIED", "SOLE_TAX_FREE"];
-
-function isValidBizType(v: unknown): v is BizType {
-  return typeof v === "string" && (BIZ_TYPES as string[]).includes(v);
-}
+import { BIZ_TYPE_LABEL, isBizType } from "@/lib/tax/bizType";
 
 function urgencyOf(daysUntil: number): {
   label: string;
@@ -47,7 +40,7 @@ export default async function ChecklistPage({
     throw e;
   }
 
-  if (!isValidBizType(client.bizType)) {
+  if (!isBizType(client.bizType)) {
     // 데이터 손상 — 안내
     return (
       <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
