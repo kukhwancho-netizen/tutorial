@@ -37,11 +37,27 @@ export default async function ClientDetailPage({
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-xl font-semibold text-slate-800">{client.name}</h1>
-        <p className="text-sm text-slate-500">
-          사업자번호 <span className="font-mono">{client.bizNo}</span> · 대표 {client.ownerName}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-800">{client.name}</h1>
+          <p className="text-sm text-slate-500">
+            사업자번호 <span className="font-mono">{client.bizNo}</span> · 대표 {client.ownerName}
+          </p>
+        </div>
+        <nav className="flex gap-2 text-sm">
+          <a
+            href={`/clients/${client.id}/checklist`}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
+          >
+            세무 체크리스트
+          </a>
+          <a
+            href={`/clients/${client.id}/journal/new`}
+            className="rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700"
+          >
+            + 분개 입력
+          </a>
+        </nav>
       </header>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">

@@ -2,6 +2,16 @@ import Link from "next/link";
 
 const FEATURES = [
   {
+    href: "/calendar",
+    title: "연간 세무달력",
+    desc: "사업자 유형별 신고·납부 마감일을 12개월 한눈에. 매월 반복(원천세·4대보험) 포함.",
+  },
+  {
+    href: "/clients",
+    title: "거래처 관리",
+    desc: "고객사별 분개 입력·부가세 집계·세무 체크리스트를 확인합니다.",
+  },
+  {
     href: "/calculators/vat",
     title: "부가가치세 계산기",
     desc: "매출·매입 공급가액을 입력하면 납부세액을 산출합니다.",
@@ -20,11 +30,6 @@ const FEATURES = [
     href: "/calculators/insurance",
     title: "4대보험 계산기",
     desc: "월보수 기준 근로자·사업주 부담분을 계산합니다.",
-  },
-  {
-    href: "/clients",
-    title: "거래처 관리",
-    desc: "세무사 사무소가 관리하는 고객사 목록 및 사업자 정보를 관리합니다.",
   },
 ];
 
