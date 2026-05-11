@@ -30,7 +30,11 @@
 | `create_journal_entry` | **분개 입력 — 영수증/세금계산서를 데이터로 저장할 때** |
 | `list_recent_journal_entries` | 최근 분개 조회 |
 | `verify_biz_no` | 거래처 등록 전 사업자등록번호 진위·상태(계속/휴업/폐업) 조회 |
-| `generate_vat_filing_guide` | 홈택스 부가세 신고 단계별 가이드(마크다운) 생성 — 사용자가 직접 신고할 때 |
+| `generate_vat_filing_guide` | 홈택스 부가세 신고 단계별 가이드 — 사용자 직접 신고 |
+| `generate_income_tax_filing_guide` | 종합소득세(5월, 개인) 단계별 가이드 — 분개 매출 자동 집계 |
+| `generate_corporate_tax_filing_guide` | 법인세 단계별 가이드 — 법인 전용 |
+| `generate_withholding_filing_guide` | 원천세(월별, 다음달 10일) 가이드 — 사업/기타소득 자동 계산 |
+| `generate_business_status_filing_guide` | 사업장현황신고(2/10, 면세) 가이드 — 1년치 매출 자동 |
 
 도구가 연결돼 있지 않으면(웹 Project) 지식 파일(knowledge/)의 정적 정보로만 답하고, 실행이 필요한 요청은 "MCP가 연결되면 자동으로 처리됩니다 — 현재는 다음 분개를 직접 입력하세요:" 라고 안내한 뒤 분개 명세를 출력합니다.
 

@@ -27,7 +27,14 @@ import {
   type ResolvedUser,
 } from "@/lib/auth/guardCore";
 import { fetchNtsStatus, checksumValid, normalizeBizNo } from "@/lib/tax/bizNo";
-import { generateVatFilingGuide, type VatFilingPeriod } from "@/lib/tax/filingGuide";
+import {
+  generateVatFilingGuide,
+  generateIncomeTaxFilingGuide,
+  generateCorporateTaxFilingGuide,
+  generateWithholdingFilingGuide,
+  generateBusinessStatusFilingGuide,
+  type VatFilingPeriod,
+} from "@/lib/tax/filingGuide";
 
 const userEmail = process.env.MCP_USER_EMAIL;
 if (!userEmail) {
@@ -337,10 +344,108 @@ server.tool(
   },
 );
 
+server.tool(
+  "generate_income_tax_filing_guide",
+  "개인사업자 종합소득세(5월 신고) 단계별 가이드. 분개 매출 자동 집계 + 사용자 소득금액·부양가족 직접 입력.",
+  {
+    clientId: z.string(),
+    taxYear: z.number().int().describe("귀속연도 (예: 2025)"),
+    incomeAmount: z.number().optional().describe("종합소득금액(수입-필요경비). 없으면 가이드만 출력"),
+    dependents: z.number().int().min(1).optional(),
+  },
+  async ({ clientId, taxYear, incomeAmount, dependents }) => {
+    const client = await checkClientAccess(await user(), clientId);
+    // 해당 연도 매출 집계 (참고)
+    const from = new Date(taxYear, 0, 1);
+    const to = new Date(taxYear, 11, 31, 23, 59, 59);
+    const agg = await aggregateVat({ clientId, from, to });
+    const guide = generateIncomeTaxFilingGuide({
+      clientName: client.name,
+      taxYear,
+      salesFromJournal: agg.salesSupply,
+      incomeAmount,
+      dependents,
+    });
+    return ok(guide);
+  },
+);
+
+server.tool(
+  "generate_corporate_tax_filing_guide",
+  "법인세 신고(결산일 후 3개월) 단계별 가이드. 법인 고객사 전용.",
+  {
+    clientId: z.string(),
+    fiscalYearEnd: z.string().describe("결산일 YYYY-MM-DD (보통 12-31)"),
+  },
+  async ({ clientId, fiscalYearEnd }) => {
+    const client = await checkClientAccess(await user(), clientId);
+    if (client.bizType !== "CORPORATION") {
+      throw new Error("법인사업자만 사용 가능 (현 고객사는 " + client.bizType + ")");
+    }
+    const end = new Date(fiscalYearEnd);
+    const startYear = end.getFullYear();
+    const from = new Date(startYear, 0, 1);
+    const agg = await aggregateVat({ clientId, from, to: end });
+    const guide = generateCorporateTaxFilingGuide({
+      clientName: client.name,
+      fiscalYearEnd,
+      salesFromJournal: agg.salesSupply,
+    });
+    return ok(guide);
+  },
+);
+
+server.tool(
+  "generate_withholding_filing_guide",
+  "월별 원천세 신고(다음달 10일) 단계별 가이드. 사업소득/기타소득 지급액 입력 시 원천세 자동 계산.",
+  {
+    clientId: z.string(),
+    targetMonth: z.string().describe("신고대상 월 YYYY-MM"),
+    businessIncomePaid: z.number().optional().describe("프리랜서 등 사업소득 지급 합계"),
+    otherIncomePaid: z.number().optional().describe("강사료 등 기타소득 지급 합계"),
+    wageIncomePaid: z.number().optional().describe("근로소득 지급 합계 (참고용 — 실제 원천세는 간이세액표)"),
+  },
+  async ({ clientId, targetMonth, businessIncomePaid, otherIncomePaid, wageIncomePaid }) => {
+    const client = await checkClientAccess(await user(), clientId);
+    const guide = generateWithholdingFilingGuide({
+      clientName: client.name,
+      targetMonth,
+      businessIncomePaid,
+      otherIncomePaid,
+      wageIncomePaid,
+    });
+    return ok(guide);
+  },
+);
+
+server.tool(
+  "generate_business_status_filing_guide",
+  "면세사업자 사업장현황신고(2/10) 단계별 가이드. 1년치 매출 자동 집계.",
+  {
+    clientId: z.string(),
+    taxYear: z.number().int().describe("귀속연도 (예: 2025)"),
+  },
+  async ({ clientId, taxYear }) => {
+    const client = await checkClientAccess(await user(), clientId);
+    if (client.bizType !== "SOLE_TAX_FREE") {
+      throw new Error("면세사업자만 사용 (현 고객사는 " + client.bizType + ")");
+    }
+    const from = new Date(taxYear, 0, 1);
+    const to = new Date(taxYear, 11, 31, 23, 59, 59);
+    const agg = await aggregateVat({ clientId, from, to });
+    const guide = generateBusinessStatusFilingGuide({
+      clientName: client.name,
+      taxYear,
+      annualSales: agg.salesSupply,
+    });
+    return ok(guide);
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[mcp] tax-accounting-mcp v0.2.0 ready (user=${userEmail})`);
+  console.error(`[mcp] tax-accounting-mcp v0.3.0 ready (user=${userEmail})`);
 }
 
 main().catch((e) => {
