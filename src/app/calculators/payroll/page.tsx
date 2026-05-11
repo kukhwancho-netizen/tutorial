@@ -5,13 +5,23 @@ import { MoneyInput, fmt } from "@/components/MoneyInput";
 import { calcFourMajorInsurance } from "@/lib/tax/insurance";
 import { estimateMonthlyWageWithholding } from "@/lib/tax/withholding";
 
-const LIMITS = {
-  meal: 200_000,
-  carAllowance: 200_000,
-  childcare: 200_000,
-};
+const LIMITS = { meal: 200_000, carAllowance: 200_000, childcare: 200_000 };
+
+function todayISO(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 export default function PayrollCalculatorPage() {
+  // 사업장 정보
+  const [companyName, setCompanyName] = useState("");
+  const [bizNo, setBizNo] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  // 직원 + 지급일
+  const [employeeName, setEmployeeName] = useState("");
+  const [payDate, setPayDate] = useState(todayISO());
+  // 급여
   const [gross, setGross] = useState(3_000_000);
   const [meal, setMeal] = useState(200_000);
   const [carAllowance, setCarAllowance] = useState(0);
@@ -20,6 +30,7 @@ export default function PayrollCalculatorPage() {
   const [dependents, setDependents] = useState(1);
   const [children, setChildren] = useState(0);
   const [firmSize, setFirmSize] = useState<"SMALL" | "MID_LARGE">("SMALL");
+  const [showEmployerCost, setShowEmployerCost] = useState(false);
 
   const totalNonTax =
     Math.min(meal, LIMITS.meal) +
@@ -28,7 +39,7 @@ export default function PayrollCalculatorPage() {
     otherNonTax;
   const taxableSalary = Math.max(0, gross - totalNonTax);
 
-  const insurance = useMemo(
+  const ins = useMemo(
     () => calcFourMajorInsurance({ monthlySalary: taxableSalary, firmSize }),
     [taxableSalary, firmSize],
   );
@@ -42,161 +53,249 @@ export default function PayrollCalculatorPage() {
     [taxableSalary, dependents, children],
   );
 
-  const totalDeduction = insurance.employee.total + wage.incomeTax + wage.localTax;
+  const totalDeduction = ins.employee.total + wage.incomeTax + wage.localTax;
   const netPay = gross - totalDeduction;
-  const employerCost = gross + insurance.employer.total;
+  const employerCost = gross + ins.employer.total;
+
+  const ym = payDate.slice(0, 7).replace("-", "년 ") + "월";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-      {/* 왼쪽: 입력 */}
-      <section className="space-y-5 rounded-lg border border-slate-200 bg-white p-6">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-800">월급 통합 계산기</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            총급여 + 비과세 + 부양가족 입력하면 4대보험·원천세·실수령액·사업주 부담을 한 번에 산출.
-          </p>
-        </div>
+    <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+      {/* 왼쪽: 입력 (인쇄/캡쳐 시 숨김) */}
+      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 print:hidden">
+        <h1 className="text-lg font-semibold text-slate-800">급여명세서 만들기</h1>
+        <p className="text-xs text-slate-500">
+          입력하면 오른쪽이 실시간 명세서로 바뀝니다. 캡쳐(Windows: <kbd>Win+Shift+S</kbd>)하거나
+          맨 아래 인쇄 버튼으로 저장.
+        </p>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <MoneyInput
-            label="월 급여 총액 (세전, 비과세 포함)"
-            value={gross}
-            onChange={setGross}
-            hint="근로계약서상 월급여 총액"
-          />
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold text-slate-500">사업장 정보</legend>
+          <Text label="사업장명 (상호)" value={companyName} onChange={setCompanyName} placeholder="(주)○○회사" />
+          <Text label="사업자등록번호" value={bizNo} onChange={setBizNo} placeholder="123-45-67890" />
+          <Text label="대표자명" value={ownerName} onChange={setOwnerName} placeholder="홍길동" />
+        </fieldset>
+
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold text-slate-500">직원 / 지급일</legend>
+          <Text label="직원 성명" value={employeeName} onChange={setEmployeeName} placeholder="김직원" />
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">사업장 규모</span>
-            <select
-              value={firmSize}
-              onChange={(e) => setFirmSize(e.target.value as "SMALL" | "MID_LARGE")}
+            <span className="text-xs text-slate-600">지급일</span>
+            <input
+              type="date"
+              value={payDate}
+              onChange={(e) => setPayDate(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="SMALL">150인 미만</option>
-              <option value="MID_LARGE">150인 이상</option>
-            </select>
+            />
           </label>
-        </div>
+        </fieldset>
 
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">비과세 항목 (월)</h3>
-          <div className="grid gap-3 md:grid-cols-2">
-            <MoneyInput label="식대" value={meal} onChange={setMeal} hint={`한도 ${fmt(LIMITS.meal)}`} />
-            <MoneyInput
-              label="자가운전보조금"
-              value={carAllowance}
-              onChange={setCarAllowance}
-              hint={`한도 ${fmt(LIMITS.carAllowance)} · 본인 차량·업무용`}
-            />
-            <MoneyInput
-              label="출산·보육수당 (6세 이하)"
-              value={childcare}
-              onChange={setChildcare}
-              hint={`한도 ${fmt(LIMITS.childcare)}`}
-            />
-            <MoneyInput
-              label="기타 비과세"
-              value={otherNonTax}
-              onChange={setOtherNonTax}
-              hint="연구활동비·일직숙직료 등"
-            />
-          </div>
-        </div>
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold text-slate-500">급여 / 비과세</legend>
+          <MoneyInput label="월 급여 총액 (세전)" value={gross} onChange={setGross} />
+          <MoneyInput label="식대" value={meal} onChange={setMeal} hint={`한도 ${fmt(LIMITS.meal)}`} />
+          <MoneyInput label="자가운전보조금" value={carAllowance} onChange={setCarAllowance} hint={`한도 ${fmt(LIMITS.carAllowance)}`} />
+          <MoneyInput label="출산·보육수당" value={childcare} onChange={setChildcare} hint={`한도 ${fmt(LIMITS.childcare)}`} />
+          <MoneyInput label="기타 비과세" value={otherNonTax} onChange={setOtherNonTax} />
+        </fieldset>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <fieldset className="grid grid-cols-3 gap-2">
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">부양가족 수 (본인 포함)</span>
+            <span className="text-xs text-slate-600">부양가족</span>
             <input
               type="number"
               min={1}
               value={dependents}
               onChange={(e) => setDependents(Math.max(1, Number(e.target.value)))}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-right font-mono"
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-right font-mono text-sm"
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-slate-700">8세~20세 자녀 수</span>
+            <span className="text-xs text-slate-600">8~20세 자녀</span>
             <input
               type="number"
               min={0}
               value={children}
               onChange={(e) => setChildren(Math.max(0, Number(e.target.value)))}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-right font-mono"
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-right font-mono text-sm"
             />
           </label>
-        </div>
+          <label className="block">
+            <span className="text-xs text-slate-600">사업장 규모</span>
+            <select
+              value={firmSize}
+              onChange={(e) => setFirmSize(e.target.value as "SMALL" | "MID_LARGE")}
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="SMALL">150인 미만</option>
+              <option value="MID_LARGE">150인 이상</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <label className="flex items-center gap-2 text-xs text-slate-700">
+          <input
+            type="checkbox"
+            checked={showEmployerCost}
+            onChange={(e) => setShowEmployerCost(e.target.checked)}
+          />
+          명세서에 사업주 부담 표시 (내부용)
+        </label>
+
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="w-full rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+        >
+          🖨 인쇄 / PDF 저장
+        </button>
       </section>
 
-      {/* 오른쪽: 명세서 */}
-      <aside className="space-y-4">
-        {/* 사장님 카드 */}
-        <div className="rounded-lg border-2 border-brand-500 bg-white p-5">
-          <h2 className="mb-3 text-sm font-semibold text-brand-700">📋 사장님 결제</h2>
-          <Row label="월 급여 (총액)" value={gross} />
-          <Row label="+ 4대보험 사업주 부담" value={insurance.employer.total} />
-          <Row label="총 인건비" value={employerCost} bold large />
-        </div>
+      {/* 오른쪽: 명세서 (캡쳐·인쇄 대상) */}
+      <article id="payslip" className="rounded-lg border-2 border-slate-300 bg-white p-8 shadow-sm print:border-0 print:shadow-none">
+        <header className="border-b-2 border-slate-800 pb-3 text-center">
+          <h2 className="text-2xl font-bold tracking-wide text-slate-900">급여명세서</h2>
+          <p className="mt-1 text-sm text-slate-600">{ym}</p>
+        </header>
 
-        {/* 직원 카드 */}
-        <div className="rounded-lg border border-slate-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-semibold text-slate-700">👤 직원 명세서</h2>
-          <Row label="월 급여 (총액)" value={gross} />
-          <div className="my-2 border-t border-slate-200" />
-          <Row label="− 비과세 합계" value={-totalNonTax} muted />
-          <Row label="과세 보수월액" value={taxableSalary} muted />
-          <div className="my-2 border-t border-slate-200" />
+        <section className="mt-4 grid grid-cols-2 gap-y-1 text-sm">
+          <Info label="사업장" value={companyName || "_____________"} />
+          <Info label="사업자등록번호" value={bizNo || "_____________"} />
+          <Info label="대표자" value={ownerName || "_____________"} />
+          <Info label="지급일" value={payDate} />
+        </section>
 
-          <details className="text-xs text-slate-600">
-            <summary className="cursor-pointer font-medium">4대보험 (근로자분) 상세</summary>
-            <Row label="국민연금 4.5%" value={insurance.employee.nationalPension} small />
-            <Row label="건강 3.545%" value={insurance.employee.healthInsurance} small />
-            <Row label="장기요양" value={insurance.employee.longTermCare} small />
-            <Row label="고용 0.9%" value={insurance.employee.employmentInsurance} small />
-          </details>
-          <Row label="− 4대보험 (근로자)" value={-insurance.employee.total} />
+        <section className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-sm">
+          <span className="text-xs text-slate-500">성명</span>
+          <span className="ml-3 text-base font-bold text-slate-900">
+            {employeeName || "_____________"}
+          </span>
+        </section>
 
-          <details className="text-xs text-slate-600">
-            <summary className="cursor-pointer font-medium">원천세 상세 (간이세액 추정)</summary>
-            <Row label="월 소득세" value={wage.incomeTax} small />
-            <Row label="월 지방소득세" value={wage.localTax} small />
-          </details>
-          <Row label="− 원천세" value={-(wage.incomeTax + wage.localTax)} />
+        <section className="mt-5">
+          <h3 className="border-b border-slate-300 pb-1 text-sm font-bold text-slate-700">지급 내역</h3>
+          <table className="mt-2 w-full text-sm">
+            <tbody>
+              <RowTbl label="기본급 + 수당 (과세)" value={taxableSalary} />
+              {meal > 0 && <RowTbl label="식대 (비과세)" value={Math.min(meal, LIMITS.meal)} muted />}
+              {carAllowance > 0 && <RowTbl label="자가운전보조금 (비과세)" value={Math.min(carAllowance, LIMITS.carAllowance)} muted />}
+              {childcare > 0 && <RowTbl label="출산·보육수당 (비과세)" value={Math.min(childcare, LIMITS.childcare)} muted />}
+              {otherNonTax > 0 && <RowTbl label="기타 비과세" value={otherNonTax} muted />}
+              <RowTbl label="지급액 합계" value={gross} strong />
+            </tbody>
+          </table>
+        </section>
 
-          <div className="my-2 border-t border-slate-200" />
-          <Row label="실수령액" value={netPay} bold large />
-        </div>
+        <section className="mt-5">
+          <h3 className="border-b border-slate-300 pb-1 text-sm font-bold text-slate-700">공제 내역</h3>
+          <table className="mt-2 w-full text-sm">
+            <tbody>
+              <RowTbl label="국민연금 (4.5%)" value={ins.employee.nationalPension} />
+              <RowTbl label="건강보험 (3.545%)" value={ins.employee.healthInsurance} />
+              <RowTbl label="장기요양보험 (건강×12.95%)" value={ins.employee.longTermCare} />
+              <RowTbl label="고용보험 (0.9%)" value={ins.employee.employmentInsurance} />
+              <RowTbl label="소득세" value={wage.incomeTax} />
+              <RowTbl label="지방소득세" value={wage.localTax} />
+              <RowTbl label="공제 합계" value={totalDeduction} strong />
+            </tbody>
+          </table>
+        </section>
 
-        <p className="px-1 text-xs text-slate-500">
-          * 정확한 근로소득세는 국세청 간이세액표를 따르며 본 결과는 ±수천원 오차 가능. 4대보험은
-          2025-07 기준 요율·국민연금 상하한(40만~637만) 적용.
-        </p>
-      </aside>
+        <section className="mt-5 border-t-2 border-slate-800 pt-4">
+          <div className="flex items-baseline justify-between">
+            <span className="text-base font-bold text-slate-900">실 지급액</span>
+            <span className="font-mono text-2xl font-bold text-brand-700">{fmt(netPay)} 원</span>
+          </div>
+        </section>
+
+        {showEmployerCost && (
+          <section className="mt-5 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+            <p className="font-semibold text-slate-700">사업주 부담 (참고 — 직원에게는 표시되지 않습니다)</p>
+            <table className="mt-1 w-full">
+              <tbody>
+                <RowTbl label="국민연금 사업주" value={ins.employer.nationalPension} small />
+                <RowTbl label="건강보험 사업주" value={ins.employer.healthInsurance} small />
+                <RowTbl label="장기요양 사업주" value={ins.employer.longTermCare} small />
+                <RowTbl label="고용보험 사업주" value={ins.employer.employmentInsurance} small />
+                <RowTbl label="산재보험" value={ins.employer.workersComp} small />
+                <RowTbl label="사업주 부담 합계" value={ins.employer.total} small strong />
+                <RowTbl label="총 인건비 (지급 + 부담)" value={employerCost} small strong />
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        <footer className="mt-6 text-xs text-slate-400">
+          * 소득세는 국세청 간이세액표 기반 추정 (±수천원 오차).
+          국민연금 기준소득월액 상·하한 적용 (40만~637만, 2025-07 기준).
+        </footer>
+      </article>
+
+      <style>{`
+        @media print {
+          @page { size: A4; margin: 15mm; }
+          body { background: white !important; }
+        }
+      `}</style>
     </div>
   );
 }
 
-function Row({
+function Text({
   label,
   value,
-  bold,
-  large,
-  small,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-xs text-slate-600">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+      />
+    </label>
+  );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="text-sm">
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className="ml-2 text-slate-800">{value}</span>
+    </div>
+  );
+}
+
+function RowTbl({
+  label,
+  value,
+  strong,
   muted,
+  small,
 }: {
   label: string;
   value: number;
-  bold?: boolean;
-  large?: boolean;
-  small?: boolean;
+  strong?: boolean;
   muted?: boolean;
+  small?: boolean;
 }) {
   return (
-    <div
-      className={`flex items-center justify-between border-b border-slate-100 py-1.5 last:border-b-0 ${
-        large ? "text-base" : small ? "text-xs" : "text-sm"
-      } ${bold ? "font-bold text-brand-700" : muted ? "text-slate-500" : "text-slate-700"}`}
+    <tr
+      className={`${
+        strong ? "border-t-2 border-slate-800 font-bold text-slate-900" : "border-b border-slate-100"
+      } ${muted ? "text-slate-500" : "text-slate-800"} ${small ? "text-xs" : "text-sm"}`}
     >
-      <span>{label}</span>
-      <span className="font-mono">{value < 0 ? `−${fmt(-value)}` : fmt(value)}</span>
-    </div>
+      <td className="py-1">{label}</td>
+      <td className="py-1 text-right font-mono">{fmt(value)}</td>
+    </tr>
   );
 }
