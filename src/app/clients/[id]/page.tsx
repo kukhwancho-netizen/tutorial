@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { AuthError, requireClientAccess } from "@/lib/auth/guard";
 import { aggregateVat } from "@/lib/accounting/journal";
+import { findAnomalies, type Anomaly } from "@/lib/accounting/anomaly";
 import { fmt } from "@/lib/format";
 
 export default async function ClientDetailPage({
@@ -35,6 +36,8 @@ export default async function ClientDetailPage({
     include: { lines: { include: { account: true } } },
   });
 
+  const anomalies = await findAnomalies(client.id);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -65,6 +68,14 @@ export default async function ClientDetailPage({
           </a>
         </nav>
       </header>
+
+      {anomalies.length > 0 && (
+        <section className="space-y-2">
+          {anomalies.map((a, i) => (
+            <AnomalyBanner key={i} a={a} />
+          ))}
+        </section>
+      )}
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -134,6 +145,22 @@ export default async function ClientDetailPage({
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function AnomalyBanner({ a }: { a: Anomaly }) {
+  const style =
+    a.severity === "alert"
+      ? "border-red-200 bg-red-50 text-red-800"
+      : a.severity === "warn"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-slate-200 bg-slate-50 text-slate-700";
+  const icon = a.severity === "alert" ? "🚨" : a.severity === "warn" ? "⚠" : "ℹ";
+  return (
+    <div className={`rounded-md border p-3 text-sm ${style}`}>
+      <p className="font-semibold">{icon} {a.title}</p>
+      <p className="mt-1 text-xs">{a.detail}</p>
     </div>
   );
 }

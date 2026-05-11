@@ -21,6 +21,8 @@ import {
   createStandardJournalEntriesBulk,
   aggregateVat,
 } from "@/lib/accounting/journal";
+import { findAnomalies } from "@/lib/accounting/anomaly";
+import { generateIcs } from "@/lib/calendar/ics";
 import {
   checkClientAccess,
   findAccessibleClients,
@@ -486,10 +488,45 @@ server.tool(
   },
 );
 
+server.tool(
+  "find_journal_anomalies",
+  "고객사 분개에서 누락·이상을 휴리스틱으로 감지. 신고 전·월말 점검용. (매출 급변, 신고시즌 임박 누락, 거래처 단절, VAT 미분류)",
+  {
+    clientId: z.string(),
+  },
+  async ({ clientId }) => {
+    await checkClientAccess(await user(), clientId);
+    const anomalies = await findAnomalies(clientId);
+    return okJson({
+      count: anomalies.length,
+      bySeverity: {
+        alert: anomalies.filter((a) => a.severity === "alert").length,
+        warn: anomalies.filter((a) => a.severity === "warn").length,
+        info: anomalies.filter((a) => a.severity === "info").length,
+      },
+      items: anomalies,
+    });
+  },
+);
+
+server.tool(
+  "generate_calendar_ics",
+  "사업자 유형별 1년치 세무 일정을 iCalendar(.ics) 텍스트로 반환. 구글/애플/아웃룩 캘린더 모두 지원. D-7·D-1 알림 자동 포함.",
+  {
+    bizType: z.enum(BIZ_TYPES),
+    year: z.number().int().min(2000).max(2100).optional(),
+    reminderDays: z.array(z.number().int().min(0).max(60)).optional(),
+  },
+  async ({ bizType, year, reminderDays }) => {
+    const ics = generateIcs(bizType as BizType, { year, reminderDays });
+    return ok(ics);
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[mcp] tax-accounting-mcp v0.4.0 ready (user=${userEmail})`);
+  console.error(`[mcp] tax-accounting-mcp v0.5.0 ready (user=${userEmail})`);
 }
 
 main().catch((e) => {

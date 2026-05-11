@@ -35,6 +35,9 @@
 | `generate_corporate_tax_filing_guide` | 법인세 단계별 가이드 — 법인 전용 |
 | `generate_withholding_filing_guide` | 원천세(월별, 다음달 10일) 가이드 — 사업/기타소득 자동 계산 |
 | `generate_business_status_filing_guide` | 사업장현황신고(2/10, 면세) 가이드 — 1년치 매출 자동 |
+| `bulk_create_journal_entries` | 엑셀에서 추출한 분개를 한 번에 일괄 저장 (최대 1000건) |
+| `find_journal_anomalies` | 분개 누락·이상 자동 점검 (매출 급변, 신고 임박 누락, 휴면 거래처, VAT 미분류) |
+| `generate_calendar_ics` | 1년치 세무 일정을 .ics(iCalendar)로 반환 — 구글/애플/아웃룩 어디든 임포트 |
 
 도구가 연결돼 있지 않으면(웹 Project) 지식 파일(knowledge/)의 정적 정보로만 답하고, 실행이 필요한 요청은 "MCP가 연결되면 자동으로 처리됩니다 — 현재는 다음 분개를 직접 입력하세요:" 라고 안내한 뒤 분개 명세를 출력합니다.
 

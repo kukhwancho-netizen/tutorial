@@ -55,17 +55,28 @@ export default async function CalendarPage({
             사업자 유형별 신고·납부 마감일. 매월 반복(원천세·4대보험)은 모든 달에 표시됩니다.
           </p>
         </div>
-        <nav className="flex flex-wrap gap-1 text-xs">
-          <FilterLink href="/calendar?bizType=ALL" label="전체" active={selected === "ALL"} />
-          {BIZ_TYPES.map((t) => (
-            <FilterLink
-              key={t}
-              href={`/calendar?bizType=${t}`}
-              label={BIZ_TYPE_LABEL[t]}
-              active={selected === t}
-            />
-          ))}
-        </nav>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <nav className="flex flex-wrap gap-1">
+            <FilterLink href="/calendar?bizType=ALL" label="전체" active={selected === "ALL"} />
+            {BIZ_TYPES.map((t) => (
+              <FilterLink
+                key={t}
+                href={`/calendar?bizType=${t}`}
+                label={BIZ_TYPE_LABEL[t]}
+                active={selected === t}
+              />
+            ))}
+          </nav>
+          {selected !== "ALL" && (
+            <a
+              href={`/calendar/export.ics?bizType=${selected}&year=${new Date().getFullYear()}`}
+              className="rounded border border-slate-300 px-2 py-1 text-slate-600 hover:border-brand-500 hover:text-brand-600"
+              title="구글/애플/아웃룩 캘린더로 임포트할 수 있는 .ics 파일"
+            >
+              .ics 다운로드
+            </a>
+          )}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
