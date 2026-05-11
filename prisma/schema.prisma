@@ -101,13 +101,35 @@ model JournalEntry {
   isTaxInvoice Boolean  @default(false)
   /// 영수증 사진 (data URL, base64). 증빙 보관용 (5년).
   receiptImage String?
+  /// 비용 분류: "식자재" | "사무용품" | "광고선전비" | "차량유지" | "통신비" |
+  ///          "임차료" | "수도광열" | "복리후생" | "접대비" | "운반비" | "기타" 등.
+  ///          매출 거래는 보통 null.
+  category     String?
   createdAt    DateTime @default(now())
 
-  client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lines  JournalLine[]
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lines        JournalLine[]
+  receiptItems ReceiptItem[]
 
   @@index([clientId, occurredOn])
   @@index([clientId, vatDirection])
+  @@index([clientId, category])
+}
+
+/// 영수증의 품목별 명세 (한 영수증 = 여러 라인).
+/// JournalEntry.supplyAmount = 모든 ReceiptItem.amount 합계.
+model ReceiptItem {
+  id        String  @id @default(cuid())
+  entryId   String
+  name      String  // 품목명 (예: "양파 10kg", "광고비 - 5월 네이버 검색광고")
+  quantity  Float   @default(1)
+  unitPrice Int     @default(0)
+  amount    Int     // 라인 공급가액 (수량 × 단가 또는 직접 입력)
+  note      String?
+
+  entry JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@index([entryId])
 }
 
 model JournalLine {

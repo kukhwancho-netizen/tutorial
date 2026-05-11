@@ -24,7 +24,10 @@ export default async function JournalEntryDetailPage({
 
   const entry = await db.journalEntry.findFirst({
     where: { id: params.entryId, clientId: client.id },
-    include: { lines: { include: { account: true } } },
+    include: {
+      lines: { include: { account: true } },
+      receiptItems: true,
+    },
   });
   if (!entry) notFound();
 
@@ -45,6 +48,7 @@ export default async function JournalEntryDetailPage({
           <Info label="거래일자" value={entry.occurredOn.toISOString().slice(0, 10)} />
           <Info label="거래처" value={entry.counterparty ?? "-"} />
           <Info label="구분" value={dirLabel} />
+          <Info label="비용 분류" value={entry.category ?? "-"} />
           <Info label="적요" value={entry.description ?? "-"} />
         </div>
 
@@ -54,7 +58,43 @@ export default async function JournalEntryDetailPage({
           <Row label="합계금액" value={entry.totalAmount} emphasis />
         </div>
 
-        <h2 className="mt-5 mb-2 text-sm font-semibold text-slate-700">분개 라인</h2>
+        {entry.receiptItems.length > 0 && (
+          <>
+            <h2 className="mt-5 mb-2 text-sm font-semibold text-slate-700">📋 영수증 라인 명세</h2>
+            <table className="w-full text-sm">
+              <thead className="text-xs text-slate-500">
+                <tr className="border-b border-slate-200">
+                  <th className="py-1 text-left">품목</th>
+                  <th className="py-1 text-right">수량</th>
+                  <th className="py-1 text-right">단가</th>
+                  <th className="py-1 text-right">금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entry.receiptItems.map((item) => (
+                  <tr key={item.id} className="border-b border-slate-100">
+                    <td className="py-1">{item.name}</td>
+                    <td className="py-1 text-right font-mono">
+                      {item.quantity === 1 ? "-" : item.quantity}
+                    </td>
+                    <td className="py-1 text-right font-mono">
+                      {item.unitPrice > 0 ? fmt(item.unitPrice) : "-"}
+                    </td>
+                    <td className="py-1 text-right font-mono">{fmt(item.amount)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-slate-800 font-semibold">
+                  <td colSpan={3} className="py-1">합계</td>
+                  <td className="py-1 text-right font-mono">
+                    {fmt(entry.receiptItems.reduce((s, i) => s + i.amount, 0))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <h2 className="mt-5 mb-2 text-sm font-semibold text-slate-700">분개 라인 (차변·대변)</h2>
         <table className="w-full text-sm">
           <thead className="text-xs text-slate-500">
             <tr className="border-b border-slate-200">
