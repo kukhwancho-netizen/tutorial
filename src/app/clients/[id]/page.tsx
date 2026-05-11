@@ -55,6 +55,12 @@ export default async function ClientDetailPage({
             세무 체크리스트
           </a>
           <a
+            href={`/clients/${client.id}/payroll`}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
+          >
+            급여명세서
+          </a>
+          <a
             href={`/clients/${client.id}/import`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
           >
