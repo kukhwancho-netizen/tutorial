@@ -129,7 +129,7 @@ export default async function ReportsPage({
         <h2 className="mb-1 text-lg font-bold text-slate-900">① 부가세 신고 자료 — {periodLabel}</h2>
         <p className="mb-3 text-xs text-slate-500">
           이 표를 홈택스 부가세 신고서 화면에 그대로 입력하세요. 거래처별 합계표는
-          "매출처별/매입처별 세금계산서 합계표"로 별도 제출.
+          &quot;매출처별/매입처별 세금계산서 합계표&quot;로 별도 제출.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2">
