@@ -12,6 +12,11 @@ const FEATURES = [
     desc: "고객사별 분개 입력·부가세 집계·세무 체크리스트를 확인합니다.",
   },
   {
+    href: "/calculators/payroll",
+    title: "월급 통합 계산기",
+    desc: "총급여+비과세 입력하면 4대보험·원천세·실수령액·사업주 총인건비를 한 번에 산출.",
+  },
+  {
     href: "/calculators/vat",
     title: "부가가치세 계산기",
     desc: "매출·매입 공급가액을 입력하면 납부세액을 산출합니다.",
