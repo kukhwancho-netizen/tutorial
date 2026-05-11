@@ -90,6 +90,39 @@ export async function buildDigest(
 // 포매터
 // ----------------------------------------------------------------------------
 
+/**
+ * 한 줄 요약 — "뭐 해야 하는지"만. 푸시 알림·SMS·ntfy.sh 같은 짧은 채널용.
+ *
+ * 예:
+ *   "✅ 오늘 할 일 없음"
+ *   "📌 D-1 원천세 신고, D-3 4대보험"
+ *   "🚨 D-1 종소세 신고 + 분개 0건 — 점검 필요"
+ */
+export function digestToShortLine(d: Digest): string {
+  const urgent = d.clients
+    .flatMap((c) => c.upcoming.map((u) => ({ ...u, clientName: c.clientName })))
+    .filter((u) => u.daysUntil <= 7)
+    .sort((a, b) => a.daysUntil - b.daysUntil);
+
+  const alerts = d.clients
+    .flatMap((c) => c.anomalies.filter((a) => a.severity === "alert"))
+    .length;
+
+  if (urgent.length === 0 && alerts === 0) {
+    return "✅ 오늘 할 일 없음";
+  }
+
+  const items = urgent
+    .slice(0, 3)
+    .map((u) => `D-${u.daysUntil} ${u.title}`)
+    .join(", ");
+  const more = urgent.length > 3 ? ` 외 ${urgent.length - 3}건` : "";
+  const alertSuffix = alerts > 0 ? ` · 🚨 점검 ${alerts}건` : "";
+  const prefix = urgent.some((u) => u.daysUntil <= 1) ? "🚨" : "📌";
+
+  return `${prefix} ${items}${more}${alertSuffix}`;
+}
+
 export function digestToMarkdown(d: Digest): string {
   const lines: string[] = [
     `# 세무 다이제스트 (${d.generatedAt.slice(0, 10)})`,
