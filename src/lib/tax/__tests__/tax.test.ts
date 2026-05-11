@@ -77,9 +77,9 @@ describe("4대보험", () => {
     expect(r.employee.employmentInsurance).toBe(27_000);
   });
 
-  it("기준소득월액 상한 적용 (국민연금)", () => {
+  it("기준소득월액 상한 적용 (국민연금, 2025-07~ 기준)", () => {
     const r = calcFourMajorInsurance({ monthlySalary: 10_000_000 });
-    // 상한 6,170,000 × 4.5% = 277,650
-    expect(r.employee.nationalPension).toBe(277_650);
+    // 상한 6,370,000 × 4.5% = 286,650 (2025-07-01 인상)
+    expect(r.employee.nationalPension).toBe(286_650);
   });
 });
