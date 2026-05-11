@@ -44,12 +44,18 @@ export default async function ClientDetailPage({
             사업자번호 <span className="font-mono">{client.bizNo}</span> · 대표 {client.ownerName}
           </p>
         </div>
-        <nav className="flex gap-2 text-sm">
+        <nav className="flex flex-wrap gap-2 text-sm">
           <a
             href={`/clients/${client.id}/checklist`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
           >
             세무 체크리스트
+          </a>
+          <a
+            href={`/clients/${client.id}/import`}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
+          >
+            엑셀 임포트
           </a>
           <a
             href={`/clients/${client.id}/journal/new`}

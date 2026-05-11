@@ -18,6 +18,7 @@ import { eventsFor, upcoming, CATEGORY_LABEL } from "@/lib/tax/calendar";
 import { BIZ_TYPES, BIZ_TYPE_LABEL, isBizType, type BizType } from "@/lib/tax/bizType";
 import {
   createStandardJournalEntry,
+  createStandardJournalEntriesBulk,
   aggregateVat,
 } from "@/lib/accounting/journal";
 import {
@@ -442,10 +443,53 @@ server.tool(
   },
 );
 
+server.tool(
+  "bulk_create_journal_entries",
+  "여러 분개를 일괄 저장. 엑셀 행을 읽어 한꺼번에 넘길 때 사용. 한 건 실패해도 다른 건은 진행됨.",
+  {
+    clientId: z.string(),
+    entries: z.array(
+      z.object({
+        occurredOn: z.string().describe("YYYY-MM-DD"),
+        counterparty: z.string(),
+        description: z.string().optional(),
+        direction: z.enum(["SALE", "PURCHASE"]),
+        settlement: z.enum(["CASH", "CREDIT"]).default("CASH"),
+        supplyAmount: z.number(),
+        isTaxFree: z.boolean().default(false),
+        sourceRow: z.number().int().optional(),
+      }),
+    ).max(1000, "한 번에 최대 1000건"),
+  },
+  async ({ clientId, entries }) => {
+    await checkClientAccess(await user(), clientId);
+    const inputs = entries.map((e) => ({
+      clientId,
+      occurredOn: new Date(e.occurredOn),
+      counterparty: e.counterparty,
+      description: e.description,
+      direction: e.direction,
+      settlement: e.settlement,
+      supplyAmount: e.supplyAmount,
+      isTaxFree: e.isTaxFree,
+      sourceRow: e.sourceRow,
+    }));
+    const results = await createStandardJournalEntriesBulk(inputs);
+    const ok = results.filter((r) => r.ok).length;
+    const failed = results.filter((r) => !r.ok);
+    return okJson({
+      total: results.length,
+      ok,
+      failed: failed.length,
+      errors: failed.slice(0, 50).map((f) => ({ sourceRow: f.sourceRow, error: f.error })),
+    });
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[mcp] tax-accounting-mcp v0.3.0 ready (user=${userEmail})`);
+  console.error(`[mcp] tax-accounting-mcp v0.4.0 ready (user=${userEmail})`);
 }
 
 main().catch((e) => {

@@ -158,6 +158,34 @@ export async function createStandardJournalEntry(input: {
   });
 }
 
+/**
+ * 일괄 표준 분개 — 엑셀 임포트 등에서 사용.
+ * 한 건 실패해도 다른 건은 진행하고, per-row 결과를 반환.
+ */
+export async function createStandardJournalEntriesBulk(
+  inputs: Array<Parameters<typeof createStandardJournalEntry>[0] & { sourceRow?: number }>,
+) {
+  const results: Array<{
+    sourceRow?: number;
+    ok: boolean;
+    entryId?: string;
+    error?: string;
+  }> = [];
+  for (const input of inputs) {
+    try {
+      const entry = await createStandardJournalEntry(input);
+      results.push({ sourceRow: input.sourceRow, ok: true, entryId: entry.id });
+    } catch (e) {
+      results.push({
+        sourceRow: input.sourceRow,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return results;
+}
+
 /** 부가세 신고용 매출/매입 집계 */
 export async function aggregateVat(params: {
   clientId: string;
