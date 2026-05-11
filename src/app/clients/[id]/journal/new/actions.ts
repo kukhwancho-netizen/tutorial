@@ -35,6 +35,7 @@ const FormSchema = z.object({
     .transform((s) => Number(s.replace(/[^0-9-]/g, "")))
     .pipe(z.number().int().positive("공급가액은 0보다 커야 합니다.")),
   isTaxFree: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  receiptImage: optStr, // base64 data URL (선택)
 });
 
 export async function createJournalAction(
@@ -50,6 +51,7 @@ export async function createJournalAction(
     settlement: formData.get("settlement"),
     supplyAmount: formData.get("supplyAmount"),
     isTaxFree: formData.get("isTaxFree"),
+    receiptImage: formData.get("receiptImage"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "입력값이 올바르지 않습니다." };
@@ -64,6 +66,11 @@ export async function createJournalAction(
   }
 
   try {
+    // 영수증 data URL이 너무 크면 거부 (대략 4MB base64 ~= 3MB 원본)
+    const receipt = input.receiptImage?.startsWith("data:image/") ? input.receiptImage : undefined;
+    if (receipt && receipt.length > 4_500_000) {
+      return { error: "영수증 이미지가 너무 큽니다. 3MB 이하로 줄여주세요." };
+    }
     await createStandardJournalEntry({
       clientId: input.clientId,
       occurredOn: new Date(input.occurredOn),
@@ -73,6 +80,7 @@ export async function createJournalAction(
       settlement: input.settlement,
       supplyAmount: input.supplyAmount,
       isTaxFree: input.isTaxFree,
+      receiptImage: receipt,
     });
   } catch (e) {
     if (e instanceof JournalImbalanceError) {

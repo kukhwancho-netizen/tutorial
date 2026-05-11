@@ -59,6 +59,8 @@ export type CreateEntryInput = {
   supplyAmount?: number;
   vatAmount?: number;
   isTaxInvoice?: boolean;
+  /** 영수증 이미지 (data URL). 증빙 보관용 (5년 의무) */
+  receiptImage?: string;
   lines: JournalLineInput[];
 };
 
@@ -72,6 +74,7 @@ export async function createJournalEntry(input: CreateEntryInput) {
     data: {
       clientId: input.clientId,
       occurredOn: input.occurredOn,
+      receiptImage: input.receiptImage ?? null,
       description: input.description,
       counterparty: input.counterparty,
       vatDirection: input.vatDirection ?? null,
@@ -108,6 +111,7 @@ export async function createStandardJournalEntry(input: {
   settlement: "CASH" | "CREDIT";
   supplyAmount: number;
   isTaxFree?: boolean;
+  receiptImage?: string;
 }) {
   if (!Number.isFinite(input.supplyAmount) || input.supplyAmount <= 0) {
     throw new Error("공급가액은 0보다 커야 합니다.");
@@ -154,6 +158,7 @@ export async function createStandardJournalEntry(input: {
     supplyAmount: input.supplyAmount,
     vatAmount,
     isTaxInvoice: !input.isTaxFree,
+    receiptImage: input.receiptImage,
     lines,
   });
 }

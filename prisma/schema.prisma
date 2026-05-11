@@ -99,6 +99,8 @@ model JournalEntry {
   vatAmount    Int      @default(0)
   totalAmount  Int      @default(0)
   isTaxInvoice Boolean  @default(false)
+  /// 영수증 사진 (data URL, base64). 증빙 보관용 (5년).
+  receiptImage String?
   createdAt    DateTime @default(now())
 
   client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)

@@ -120,12 +120,21 @@ export default async function ClientDetailPage({
         ) : (
           <ul className="space-y-2 text-sm">
             {recentEntries.map((e) => (
-              <li key={e.id} className="rounded border border-slate-100 p-3">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>{e.occurredOn.toISOString().slice(0, 10)}</span>
-                  <span>{e.counterparty}</span>
-                </div>
-                <div className="mt-1 text-slate-800">{e.description}</div>
+              <li key={e.id} className="rounded border border-slate-100 p-3 hover:border-brand-300">
+                <a
+                  href={`/clients/${client.id}/journal/${e.id}`}
+                  className="block"
+                >
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>
+                      {e.occurredOn.toISOString().slice(0, 10)}
+                      {e.receiptImage && (
+                        <span className="ml-2 text-xs text-brand-600" title="영수증 첨부됨">📎</span>
+                      )}
+                    </span>
+                    <span>{e.counterparty}</span>
+                  </div>
+                  <div className="mt-1 text-slate-800">{e.description}</div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                   <div>
                     {e.lines
@@ -146,6 +155,7 @@ export default async function ClientDetailPage({
                       ))}
                   </div>
                 </div>
+                </a>
               </li>
             ))}
           </ul>

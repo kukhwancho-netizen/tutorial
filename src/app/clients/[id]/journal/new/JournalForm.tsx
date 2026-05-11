@@ -17,9 +17,32 @@ export function JournalForm({ clientId }: { clientId: string }) {
   const [state, action] = useFormState(createJournalAction, initial);
   const [supply, setSupply] = useState(0);
   const [isTaxFree, setIsTaxFree] = useState(false);
+  const [receiptDataUrl, setReceiptDataUrl] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const vat = useMemo(() => (isTaxFree ? 0 : Math.round(supply * 0.1)), [supply, isTaxFree]);
   const total = supply + vat;
+
+  async function handleReceiptFile(file: File | undefined) {
+    setReceiptError(null);
+    if (!file) {
+      setReceiptDataUrl(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setReceiptError("이미지 파일만 첨부 가능 (JPG, PNG, HEIC). PDF는 미지원.");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setReceiptError(`파일이 너무 큽니다 (${(file.size / 1024 / 1024).toFixed(1)}MB). 3MB 이하 권장.`);
+      return;
+    }
+    // 클라이언트 측에서 base64 data URL로 변환 (서버 액션은 hidden input으로 받음)
+    const reader = new FileReader();
+    reader.onload = (e) => setReceiptDataUrl(typeof e.target?.result === "string" ? e.target.result : null);
+    reader.onerror = () => setReceiptError("파일 읽기 실패");
+    reader.readAsDataURL(file);
+  }
 
   return (
     <form action={action} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
@@ -103,6 +126,41 @@ export function JournalForm({ clientId }: { clientId: string }) {
         />
         면세 거래 (부가세 분리 없음)
       </label>
+
+      <fieldset className="rounded-md border border-slate-200 bg-white p-3">
+        <legend className="text-sm font-medium text-slate-700">📎 영수증/세금계산서 첨부 (선택)</legend>
+        <p className="mb-2 text-xs text-slate-500">
+          증빙 보관용. 5년 의무 보관. 이미지 파일만 (JPG/PNG/HEIC), 3MB 이하 권장.
+        </p>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => handleReceiptFile(e.target.files?.[0])}
+          className="text-sm"
+        />
+        {/* 서버 액션이 receiptImage로 받음 */}
+        <input type="hidden" name="receiptImage" value={receiptDataUrl ?? ""} />
+        {receiptError && (
+          <p className="mt-2 text-xs text-red-600">{receiptError}</p>
+        )}
+        {receiptDataUrl && (
+          <div className="mt-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={receiptDataUrl}
+              alt="영수증 미리보기"
+              className="max-h-48 rounded border border-slate-200"
+            />
+            <button
+              type="button"
+              onClick={() => { setReceiptDataUrl(null); setReceiptError(null); }}
+              className="mt-1 text-xs text-slate-500 hover:text-red-600"
+            >
+              제거
+            </button>
+          </div>
+        )}
+      </fieldset>
 
       <div className="rounded-md bg-slate-50 p-3 text-sm">
         <Row label="공급가액" value={supply} />
