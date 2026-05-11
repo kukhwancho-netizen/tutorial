@@ -121,6 +121,61 @@ prisma/
 - 세무사 ↔ 고객사 N:M (`Membership`) 권한
 - 오픈 리다이렉트 방지: `next` 파라미터는 `/` 시작이고 `//` 아닐 때만 허용
 
+## Claude Desktop 연결 (MCP 서버)
+
+이 레포는 `src/mcp/server.ts` 에 MCP(Model Context Protocol) 서버를 포함합니다. Claude Desktop에 연결하면 채팅창에서 자연어로:
+
+> "샘플상사 2026년 1분기 매출 3천만, 매입 1천만일 때 부가세 얼마야?"
+> "이 영수증으로 분개 만들어줘" *(영수증 사진 첨부 — Claude 비전이 직접 읽음)*
+> "이번 달 마감 임박한 거 뭐 있어?"
+
+### 노출되는 도구 (10개)
+
+| Tool | 설명 |
+| --- | --- |
+| `list_clients` | 내 접근 가능 고객사 목록 |
+| `calc_vat` / `calc_income_tax` / `calc_withholding` / `calc_insurance` | 세액 계산 (DB 불필요) |
+| `get_tax_calendar` | 사업자 유형별 연간 신고 일정 |
+| `get_upcoming_checklist` | 고객사별 N일 이내 마감 항목 |
+| `get_client_vat_aggregate` | 고객사·기간별 매출/매입/납부세액 집계 |
+| `create_journal_entry` | 표준 분개 입력 (부가세 자동 분리) — **영수증 워크플로우의 핵심** |
+| `list_recent_journal_entries` | 최근 분개 조회 |
+
+### 설정
+
+Claude Desktop의 `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "tax-accounting": {
+      "command": "npx",
+      "args": ["-y", "tsx", "/절대경로/tutorial/src/mcp/server.ts"],
+      "env": {
+        "DATABASE_URL": "file:/절대경로/tutorial/prisma/dev.db",
+        "MCP_USER_EMAIL": "accountant@example.com"
+      }
+    }
+  }
+}
+```
+
+설정 저장 후 Claude Desktop 재시작 → 채팅창 아래 도구 아이콘에 `tax-accounting` 표시.
+
+### 로컬 테스트
+
+```bash
+npm run mcp   # stdio로 시작 (tools/list 등 JSON-RPC 메시지 입력 가능)
+```
+
+### 보안 / 권한
+
+- 단일 사용자 가정 — `MCP_USER_EMAIL`이 식별자
+- 역할에 따라 접근 범위 자동 적용:
+  - `ACCOUNTANT` → 본인 firmId 의 모든 고객사
+  - `CLIENT` → 본인 Membership 보유 고객사만
+- 운영에서는 OAuth/API key 기반 인증으로 교체 권장
+
 ## 명령
 
 ```bash
@@ -132,6 +187,7 @@ npm run lint          # ESLint
 npm run db:push       # Prisma 스키마 적용
 npm run db:seed       # 데모 데이터
 npm run demo          # 권한 가드 + 분개 + VAT 시나리오 출력 (scripts/demo.ts)
+npm run mcp           # MCP 서버 (Claude Desktop 연결용, stdio)
 ```
 
 ## 면책

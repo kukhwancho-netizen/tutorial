@@ -77,6 +77,72 @@ export async function createJournalEntry(input: CreateEntryInput) {
   });
 }
 
+/**
+ * 표준 매출/매입 분개를 자동 생성해 저장.
+ * - 매출: (현금|외상매출금) 차변, 상품매출+부가세예수금 대변
+ * - 매입: (상품)+부가세대급금 차변, (현금|외상매입금) 대변
+ * - 면세(isTaxFree)면 부가세 라인 생략
+ * 시드 계정과목(101, 108, 251, 135, 255, 401, 146)이 필요하다.
+ */
+export async function createStandardJournalEntry(input: {
+  clientId: string;
+  occurredOn: Date;
+  counterparty: string;
+  description?: string;
+  direction: TxnDirection;
+  settlement: "CASH" | "CREDIT";
+  supplyAmount: number;
+  isTaxFree?: boolean;
+}) {
+  if (!Number.isFinite(input.supplyAmount) || input.supplyAmount <= 0) {
+    throw new Error("공급가액은 0보다 커야 합니다.");
+  }
+
+  const vatAmount = input.isTaxFree ? 0 : Math.round(input.supplyAmount * 0.1);
+  const total = input.supplyAmount + vatAmount;
+
+  const accounts = await db.account.findMany({
+    where: { clientId: input.clientId },
+    select: { id: true, code: true },
+  });
+  const pick = (code: string) => {
+    const a = accounts.find((x) => x.code === code);
+    if (!a) throw new Error(`계정과목(${code})이 등록되어 있지 않습니다. 시드를 실행하세요.`);
+    return a.id;
+  };
+
+  const cash = pick("101");
+  const ar = pick("108");
+  const ap = pick("251");
+  const vatPayable = pick("255");
+  const vatCreditable = pick("135");
+  const salesRev = pick("401");
+  const inventory = pick("146");
+
+  const lines: JournalLineInput[] = [];
+  if (input.direction === "SALE") {
+    lines.push({ accountId: input.settlement === "CASH" ? cash : ar, debit: total });
+    lines.push({ accountId: salesRev, credit: input.supplyAmount });
+    if (vatAmount > 0) lines.push({ accountId: vatPayable, credit: vatAmount });
+  } else {
+    lines.push({ accountId: inventory, debit: input.supplyAmount });
+    if (vatAmount > 0) lines.push({ accountId: vatCreditable, debit: vatAmount });
+    lines.push({ accountId: input.settlement === "CASH" ? cash : ap, credit: total });
+  }
+
+  return createJournalEntry({
+    clientId: input.clientId,
+    occurredOn: input.occurredOn,
+    description: input.description,
+    counterparty: input.counterparty,
+    vatDirection: input.isTaxFree ? null : input.direction,
+    supplyAmount: input.supplyAmount,
+    vatAmount,
+    isTaxInvoice: !input.isTaxFree,
+    lines,
+  });
+}
+
 /** 부가세 신고용 매출/매입 집계 */
 export async function aggregateVat(params: {
   clientId: string;
