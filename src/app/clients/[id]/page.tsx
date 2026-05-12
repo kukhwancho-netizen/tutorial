@@ -49,6 +49,12 @@ export default async function ClientDetailPage({
         </div>
         <nav className="flex flex-wrap gap-2 text-sm">
           <a
+            href={`/clients/${client.id}/season`}
+            className="rounded-md border-2 border-brand-500 bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-700"
+          >
+            🎯 다가오는 시즌
+          </a>
+          <a
             href={`/clients/${client.id}/checklist`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-brand-500 hover:text-brand-600"
           >

@@ -114,8 +114,12 @@ export default function IncomeTaxCalculatorPage() {
       {/* 왼쪽: 입력 */}
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 print:hidden">
         <div>
-          <h1 className="text-lg font-semibold text-slate-800">종합소득세 신고 계산</h1>
-          <p className="mt-1 text-xs text-slate-500">개인사업자 5월 정기신고 (성실신고 6/30).</p>
+          <h1 className="text-lg font-semibold text-slate-800">종합소득세 예상세액 계산</h1>
+          <div className="mt-1 rounded bg-amber-50 p-2 text-xs text-amber-800">
+            ⚠️ <b>참고용 추정치</b>입니다. 단순/기준경비율 적용 대상 여부, 세액공제 한도, 가족 인적공제
+            요건(소득·나이) 등에 따라 실제 결과는 달라질 수 있어요.
+          </div>
+          <p className="mt-2 text-xs text-slate-500">개인사업자 5월 정기신고 (성실신고 6/30).</p>
         </div>
 
         <fieldset className="space-y-2">

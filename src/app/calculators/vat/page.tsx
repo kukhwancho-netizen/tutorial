@@ -92,8 +92,12 @@ export default function VatCalculatorPage() {
       {/* 왼쪽: 입력 (인쇄 시 숨김) */}
       <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 print:hidden">
         <div>
-          <h1 className="text-lg font-semibold text-slate-800">부가가치세 신고 계산</h1>
-          <p className="mt-1 text-xs text-slate-500">
+          <h1 className="text-lg font-semibold text-slate-800">부가가치세 예상세액 계산</h1>
+          <div className="mt-1 rounded bg-amber-50 p-2 text-xs text-amber-800">
+            ⚠️ <b>참고용 추정치</b>입니다. 실제 신고는 의제매입공제·재활용세액공제 등으로 달라질 수 있어요.
+            정확한 신고는 거래처 → <b>다가오는 시즌</b> 또는 <b>신고 가이드</b> 페이지에서 진행하세요.
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
             합계금액(부가세 포함) → 공급가액 분리: <span className="font-mono">합계 ÷ 1.1</span>
           </p>
         </div>
