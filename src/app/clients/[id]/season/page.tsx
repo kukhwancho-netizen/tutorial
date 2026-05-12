@@ -207,9 +207,15 @@ function FilingCard({
             rel="noopener noreferrer"
             className="rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700"
           >
-            🔗 홈택스 바로가기
+            🔗 사이트 바로가기
           </a>
         )}
+        <Link
+          href={`/help/sites?site=${siteIdForCategory(category)}`}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:border-brand-500"
+        >
+          📘 처음이세요? 사이트 사용법
+        </Link>
         {meta?.wetaxUrl && (
           <a
             href={meta.wetaxUrl}
@@ -238,4 +244,10 @@ function guideTypeForEvent(category: string): string {
   if (category.includes("원천")) return "withholding";
   if (category.includes("사업장")) return "business-status";
   return "vat";
+}
+
+function siteIdForCategory(category: string): string {
+  if (category.includes("4대보험")) return "si4n";
+  if (category.includes("보수총액") || category.includes("산재")) return "comwel";
+  return "hometax"; // 부가세·소득세·법인세·원천세·사업장현황 모두 홈택스
 }
