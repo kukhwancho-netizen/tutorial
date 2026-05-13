@@ -103,15 +103,31 @@ export default function HelpSitesPage({
           <List items={active.tips} />
         </Section>
 
-        <footer className="rounded bg-brand-50 p-4 text-center">
-          <a
-            href={active.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            🔗 {active.name} 바로가기
-          </a>
+        <footer className="space-y-3">
+          {active.id === "hometax" && (
+            <div className="rounded border border-brand-200 bg-brand-50 p-4">
+              <h3 className="mb-2 text-sm font-bold text-brand-800">📺 화면별 상세 따라하기</h3>
+              <Link
+                href="/help/walkthrough/vat-1h-final-sole"
+                className="inline-block rounded-md bg-white border border-brand-300 px-3 py-1.5 text-sm text-brand-700 hover:bg-brand-100"
+              >
+                → 부가세 1기 확정신고 (개인 일반과세) 9단계 워크스루
+              </Link>
+              <p className="mt-1 text-xs text-slate-600">
+                실제 홈택스 화면을 따라 단계별로. 캡쳐 자리도 마련됨 (직접 추가).
+              </p>
+            </div>
+          )}
+          <div className="rounded bg-brand-50 p-4 text-center">
+            <a
+              href={active.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              🔗 {active.name} 바로가기
+            </a>
+          </div>
         </footer>
       </article>
 

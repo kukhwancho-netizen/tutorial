@@ -13,6 +13,7 @@ const NAV = [
   { href: "/clients", label: "거래처" },
   { href: "/calendar", label: "세무달력" },
   { href: "/help/sites", label: "📘 사이트 사용법" },
+  { href: "/help/industry", label: "🏷️ 업종별 안내" },
   { href: "/calculators/payroll", label: "월급" },
   { href: "/calculators/vat", label: "부가세" },
   { href: "/calculators/income", label: "종합소득세" },
